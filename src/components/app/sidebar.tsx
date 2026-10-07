@@ -28,6 +28,7 @@ import {
   UserCog,
   Building2,
   Network,
+  ReceiptText,
 } from 'lucide-react'
 import {
   Sidebar,
@@ -96,6 +97,7 @@ const MENU: MenuGroup[] = [
           { view: 'payroll', label: 'Payroll', icon: Wallet, perm: 'payroll.view' },
           { view: 'salary-sheet', label: 'Salary Sheet', icon: FileSpreadsheet, perm: 'payroll.view' },
           { view: 'salary-summary', label: 'Staff Salary Summary', icon: ScrollText, perm: 'payroll.view' },
+          { view: 'client-salary-summary', label: 'Client Salary Summary', icon: ReceiptText, perm: 'payroll.view' },
         ],
       },
     ],

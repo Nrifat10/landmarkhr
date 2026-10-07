@@ -16,6 +16,7 @@ import {
   MapPin,
   Network,
   PieChart,
+  ReceiptText,
   ScrollText,
   Settings as SettingsIcon,
   ShieldCheck,
@@ -55,6 +56,7 @@ const NAV: NavEntry[] = [
   { view: 'payroll', label: 'Payroll', icon: Wallet, perm: 'payroll.view', keywords: 'salary wages monthly payment deductions' },
   { view: 'salary-sheet', label: 'Salary Sheet', icon: FileSpreadsheet, perm: 'payroll.view', keywords: 'monthly sheet print landscape' },
   { view: 'salary-summary', label: 'Staff Salary Summary', icon: ScrollText, perm: 'payroll.view', keywords: 'category breakdown report' },
+  { view: 'client-salary-summary', label: 'Client Salary Summary', icon: ReceiptText, perm: 'payroll.view', keywords: 'client company original salary price manpower cost billing' },
   { view: 'income-list', label: 'Income List', icon: TrendingUp, perm: 'accounts.view', keywords: 'revenue payments received' },
   { view: 'expense-list', label: 'Expense List', icon: TrendingDown, perm: 'accounts.view', keywords: 'spending costs salary expense' },
   { view: 'accounts-summary', label: 'Accounts Summary', icon: PieChart, perm: 'accounts.view', keywords: 'financial statement balance chart' },
@@ -88,6 +90,7 @@ const ACTIONS: QuickAction[] = [
 
 const REPORTS: QuickAction[] = [
   { view: 'salary-summary', label: 'Staff Salary Summary Report', icon: ScrollText, perm: 'payroll.view', keywords: 'category share distribution' },
+  { view: 'client-salary-summary', label: 'Client Salary Summary Report', icon: ReceiptText, perm: 'payroll.view', keywords: 'client company original price salary rollup' },
   { view: 'accounts-summary', label: 'Financial Statement', icon: Landmark, perm: 'accounts.view', keywords: 'profit loss performance' },
   { view: 'dashboard', label: 'Financial Performance Chart', icon: BadgeDollarSign, perm: 'dashboard.view', keywords: 'income expense trend 6 months' },
 ]

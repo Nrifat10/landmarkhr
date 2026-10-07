@@ -257,6 +257,16 @@
   }
 }
 
+/* Dense cell padding for wide tables that must fit A4 landscape in print
+   (e.g. the client salary summary's 7-column roll-up) */
+@media print {
+  .print-fit-cells th,
+  .print-fit-cells td {
+    padding-left: 8px !important;
+    padding-right: 8px !important;
+  }
+}
+
 /* Tabular numbers for money columns */
 .tabular-nums {
   font-variant-numeric: tabular-nums;

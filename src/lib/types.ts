@@ -158,6 +158,53 @@ export type StaffCategory = {
   staffCount?: number
 }
 
+/** Worker entry inside a client salary group (deduped per client) */
+export type ClientSalaryWorker = {
+  id: string
+  fullName: string
+  position: string | null
+  iqamaId: string
+  categoryName: string | null
+  projectNames: string[]
+  ratePerHour: number
+  monthlySalary: number
+  status: StaffStatus
+}
+
+/** One client company's original-salary roll-up (GET /api/clients/salary-summary) */
+export type ClientSalaryGroup = {
+  clientId: string | null
+  clientName: string
+  city: string | null
+  contactPerson: string | null
+  phone: string | null
+  clientStatus: ClientStatus
+  projectCount: number
+  workers: ClientSalaryWorker[]
+  workerCount: number
+  totalMonthlySalary: number
+  avgMonthlySalary: number
+  /** Share of the sum of all group totals (workers on 2 clients count in both) */
+  share: number
+}
+
+export type ClientSalarySummaryData = {
+  cards: {
+    totalClients: number
+    /** Distinct deployed workers (a worker on 2 clients counts once) */
+    totalWorkers: number
+    /** Σ monthlySalary of distinct deployed workers */
+    totalMonthlySalary: number
+    avgMonthlySalary: number
+    /** Active staff with no project assignment at all */
+    benchWorkers: number
+    benchSalary: number
+    /** Workers deployed under 2+ different clients */
+    multiClientWorkers: number
+  }
+  groups: ClientSalaryGroup[]
+}
+
 export type StaffStatus = 'active' | 'inactive'
 
 /** GET /api/staff/[id]/profile — employment & pay summary for the staff dialog */
@@ -462,6 +509,7 @@ export type ViewKey =
   | 'payroll'
   | 'salary-sheet'
   | 'salary-summary'
+  | 'client-salary-summary'
   | 'income-list'
   | 'expense-list'
   | 'accounts-summary'

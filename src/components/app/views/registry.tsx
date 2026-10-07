@@ -11,6 +11,7 @@ import { AttendanceView } from './attendance'
 import { PayrollView } from './payroll'
 import { SalarySheetView } from './salary-sheet'
 import { SalarySummaryView } from './salary-summary'
+import { ClientSalarySummaryView } from './client-salary-summary'
 import { IncomeListView } from './income-list'
 import { ExpenseListView } from './expense-list'
 import { AccountsSummaryView } from './accounts-summary'
@@ -43,6 +44,8 @@ export function ViewRouter() {
       return <SalarySheetView />
     case 'salary-summary':
       return <SalarySummaryView />
+    case 'client-salary-summary':
+      return <ClientSalarySummaryView />
     case 'income-list':
       return <IncomeListView />
     case 'expense-list':
