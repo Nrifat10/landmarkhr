@@ -10,6 +10,7 @@ import {
   CalendarClock,
   Download,
   FolderKanban,
+  HandCoins,
   History,
   Loader2,
   LogIn,
@@ -48,6 +49,7 @@ import { cn } from '@/lib/utils'
 /** Human labels for the module codes written by logActivity(). */
 const MODULE_LABELS: Record<string, string> = {
   payroll: 'Payroll',
+  advance: 'Worker Advances',
   transaction: 'Transactions',
   transaction_category: 'Transaction Categories',
   staff: 'Staff',
@@ -135,6 +137,8 @@ function ModuleIcon({ module, className }: { module: string; className?: string 
   switch (module) {
     case 'payroll':
       return <Wallet className={className} />
+    case 'advance':
+      return <HandCoins className={className} />
     case 'transaction':
     case 'transaction_category':
       return <ArrowLeftRight className={className} />

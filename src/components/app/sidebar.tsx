@@ -6,6 +6,7 @@ import { usePathname } from 'next/navigation'
 import {
   ChevronsUpDown,
   GalleryVerticalEnd,
+  HandCoins,
   KeyRound,
   LogOut,
   Users,
@@ -95,6 +96,7 @@ const MENU: MenuGroup[] = [
           { view: 'staff-categories', label: 'Staff Categories', icon: Tags, perm: 'staff.view' },
           { view: 'attendance', label: 'Staff Attendance', icon: CalendarClock, perm: 'attendance.view' },
           { view: 'payroll', label: 'Payroll', icon: Wallet, perm: 'payroll.view' },
+          { view: 'advances', label: 'Worker Advances', icon: HandCoins, perm: 'advances.view' },
           { view: 'salary-sheet', label: 'Salary Sheet', icon: FileSpreadsheet, perm: 'payroll.view' },
           { view: 'salary-summary', label: 'Staff Salary Summary', icon: ScrollText, perm: 'payroll.view' },
           { view: 'client-salary-summary', label: 'Client Salary Summary', icon: ReceiptText, perm: 'payroll.view' },

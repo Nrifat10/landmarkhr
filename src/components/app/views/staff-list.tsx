@@ -11,6 +11,7 @@ import {
   Download,
   Eye,
   FolderKanban,
+  HandCoins,
   History,
   IdCard,
   ImagePlus,
@@ -68,6 +69,8 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { AdvanceLedgerContent } from './advances'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { Separator } from '@/components/ui/separator'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -944,6 +947,22 @@ export function StaffListView() {
                 <DialogTitle>Staff Profile</DialogTitle>
                 <DialogDescription>Full details of the staff member.</DialogDescription>
               </DialogHeader>
+              <Tabs defaultValue="profile">
+                <TabsList
+                  className={cn(
+                    'grid w-full',
+                    can(user, 'advances.view') ? 'grid-cols-2' : 'grid-cols-1'
+                  )}
+                >
+                  <TabsTrigger value="profile">Profile</TabsTrigger>
+                  {can(user, 'advances.view') ? (
+                    <TabsTrigger value="advances" className="gap-1.5">
+                      <HandCoins className="h-3.5 w-3.5" />
+                      Advances
+                    </TabsTrigger>
+                  ) : null}
+                </TabsList>
+                <TabsContent value="profile" className="mt-4">
               <div className="space-y-5">
                 <div className="flex items-center gap-4">
                   <AvatarInitials
@@ -1175,6 +1194,13 @@ export function StaffListView() {
                   )}
                 </div>
               </div>
+                </TabsContent>
+                {can(user, 'advances.view') ? (
+                  <TabsContent value="advances" className="mt-4">
+                    <AdvanceLedgerContent key={viewing.id} staffId={viewing.id} />
+                  </TabsContent>
+                ) : null}
+              </Tabs>
             </>
           ) : null}
         </DialogContent>

@@ -18,6 +18,11 @@ import {
   logActivity,
   parseDate,
 } from '@/lib/api-helpers'
+import {
+  syncPayrollAdvanceDeductions,
+  revertPayrollAdvanceDeductions,
+  otherDeductionsOf,
+} from '@/lib/advance-service'
 
 const PAYROLL_INCLUDE = {
   staff: {
@@ -173,7 +178,7 @@ export async function PUT(req: NextRequest, { params }: Params) {
           overtimeHours: input.overtimeHours,
           overtimeRateSnapshot: input.overtimeRate,
           otherEarnings: input.otherEarnings,
-          advance: input.advance,
+          advance: 0, // placeholder — re-synced from the advance module below
           absentPenalty: input.absentPenalty,
           ptAmount: input.ptAmount,
           unionFees: input.unionFees,
@@ -186,6 +191,55 @@ export async function PUT(req: NextRequest, { params }: Params) {
           payDate,
           payType: input.payType,
           taxCode,
+        },
+        include: PAYROLL_INCLUDE,
+      })
+
+      // AUTOMATIC ADVANCE DEDUCTION — reverts this payroll's old deductions
+      // and re-applies from the current advance module state (capped to room).
+      const otherDeductions = otherDeductionsOf({
+        absentPenalty: input.absentPenalty,
+        ptAmount: input.ptAmount,
+        unionFees: input.unionFees,
+        otherDeductionValue: input.otherDeductionValue,
+        otherDeductionType: input.otherDeductionType,
+        grossPay: calc.grossPay,
+      })
+      const sync = await syncPayrollAdvanceDeductions({
+        tx,
+        payrollId: id,
+        staffId: input.staffId,
+        month: input.month,
+        year: input.year,
+        grossPay: calc.grossPay,
+        otherDeductions,
+        isPaid: input.status === 'paid',
+        payDate,
+        operatorUserId: user.id,
+        staffName: staff.fullName,
+      })
+      const finalAdvance = sync.items.length ? sync.advanceTotal : input.advance
+      const finalCalc = calcPayroll({
+        totalHours: input.totalHours,
+        hourlyRate: input.hourlyRate,
+        overtimeHours: input.overtimeHours,
+        overtimeRate: input.overtimeRate,
+        otherEarnings: input.otherEarnings,
+        advance: finalAdvance,
+        absentPenalty: input.absentPenalty,
+        ptAmount: input.ptAmount,
+        unionFees: input.unionFees,
+        otherDeductionValue: input.otherDeductionValue,
+        otherDeductionType: input.otherDeductionType,
+      })
+
+      const finalPayroll = await tx.payroll.update({
+        where: { id },
+        data: {
+          advance: finalAdvance,
+          grossPay: round2(finalCalc.grossPay),
+          totalDeductions: round2(finalCalc.totalDeductions),
+          netPay: round2(finalCalc.netPay),
         },
         include: PAYROLL_INCLUDE,
       })
@@ -206,7 +260,7 @@ export async function PUT(req: NextRequest, { params }: Params) {
             data: {
               type: 'expense',
               title: `Salary Payment: ${staff.fullName}`,
-              amount: round2(calc.netPay),
+              amount: round2(finalCalc.netPay),
               transactionCategoryId: salaryCategory.id,
               projectId,
               operatorUserId: user.id,
@@ -219,15 +273,16 @@ export async function PUT(req: NextRequest, { params }: Params) {
           // stays paid ⇒ keep the linked expense amount in sync
           await tx.transaction.update({
             where: { id: linked.id },
-            data: { amount: round2(calc.netPay) },
+            data: { amount: round2(finalCalc.netPay) },
           })
         }
       } else if (linked) {
-        // no longer paid ⇒ remove the linked expense
+        // no longer paid ⇒ remove the linked expense (advance recovery entries
+        // were already removed by the sync above)
         await tx.transaction.delete({ where: { id: linked.id } })
       }
 
-      return payroll
+      return { payroll: finalPayroll, sync }
     })
 
     await logActivity({
@@ -237,11 +292,23 @@ export async function PUT(req: NextRequest, { params }: Params) {
       description: `Payroll updated: ${staff.fullName} — ${input.month}/${input.year}`,
     })
 
+    const advanceCapped = updated.sync.items.some((i) => i.applied < i.scheduled - 0.005)
+
     return ok({
-      ...serializePayroll(updated),
-      ...(calc.negativeWarning
-        ? { warning: 'Net pay computed as negative and was clamped to 0' }
+      ...serializePayroll(updated.payroll),
+      ...(updated.sync.items.length
+        ? {
+            advanceApplied: {
+              count: updated.sync.items.filter((i) => i.applied > 0).length,
+              total: round2(updated.sync.advanceTotal),
+            },
+          }
         : {}),
+      ...(advanceCapped
+        ? { warning: 'Advance deduction was capped to the available salary — the remaining balance carries to the next month' }
+        : calc.negativeWarning
+          ? { warning: 'Net pay computed as negative and was clamped to 0' }
+          : {}),
     })
   } catch {
     return serverError()
@@ -264,6 +331,8 @@ export async function DELETE(_req: NextRequest, { params }: Params) {
     const staffName = existing.staff?.fullName ?? null
 
     await db.$transaction(async (tx) => {
+      // revert advance balances + recovery income entries first, then the rows
+      await revertPayrollAdvanceDeductions(tx, id)
       // explicit delete of the linked expense (Transaction.payroll cascades, but be safe)
       await tx.transaction.deleteMany({ where: { payrollId: id } })
       await tx.payroll.delete({ where: { id } })

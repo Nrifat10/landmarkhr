@@ -36,7 +36,9 @@ export function StatCard({
     <div className="group relative overflow-hidden rounded-xl border bg-card shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md">
       <div className={cn('flex items-start justify-between gap-3 p-4 sm:p-5', onMoreInfo && 'pb-11 sm:pb-11')}>
         <div className="min-w-0">
-          <p className="truncate text-sm font-medium text-muted-foreground">{title}</p>
+          <p className="truncate text-sm font-medium text-muted-foreground" title={title}>
+            {title}
+          </p>
           <p
             className="mt-1.5 text-balance text-xl font-bold tabular-nums leading-tight tracking-tight break-words hyphens-none sm:text-2xl"
             title={valuePrefix ? `${valuePrefix} ${value}` : value}

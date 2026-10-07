@@ -266,7 +266,7 @@ export function SalarySheetPrintDialog({
                   <th className={thR}>OT Pay</th>
                   <th className={thR}>Other Earn.</th>
                   <th className={thR}>Gross</th>
-                  <th className={thR}>Advance</th>
+                  <th className={thR}>Advance Deduction</th>
                   <th className={thR}>Penalty &amp; PT</th>
                   <th className={thR}>Union &amp; Other</th>
                   <th className={thR}>Total Ded.</th>

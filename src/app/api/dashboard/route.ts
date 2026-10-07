@@ -43,7 +43,7 @@ export async function GET(req: NextRequest) {
 
     const now = new Date()
 
-    const [totalStaff, totalUsers, incomeAgg, expenseAgg, salaryAgg] =
+    const [totalStaff, totalUsers, incomeAgg, expenseAgg, salaryAgg, advanceRows] =
       await Promise.all([
         db.staff.count({ where: { deletedAt: null, status: 'active' } }),
         db.user.count(),
@@ -58,6 +58,9 @@ export async function GET(req: NextRequest) {
         db.payroll.aggregate({
           where: { status: 'paid' },
           _sum: { netPay: true },
+        }),
+        db.workerAdvance.findMany({
+          select: { amount: true, deductedAmount: true },
         }),
       ])
 
@@ -230,6 +233,14 @@ export async function GET(req: NextRequest) {
       }
     }
 
+    // ---- Advance outstanding (advances.view gated) ----
+    let advanceOutstanding: number | null = null
+    if (hasPermission(auth, 'advances.view')) {
+      advanceOutstanding = round2(
+        advanceRows.reduce((s, a) => s + a.amount - a.deductedAmount, 0)
+      )
+    }
+
     return ok({
       stats: {
         totalStaff,
@@ -238,6 +249,7 @@ export async function GET(req: NextRequest) {
         totalExpense,
         netBalance: round2(totalIncome - totalExpense),
         salaryPaid: round2(salaryAgg._sum.netPay ?? 0),
+        advanceOutstanding,
       },
       payrollStatus,
       chart,

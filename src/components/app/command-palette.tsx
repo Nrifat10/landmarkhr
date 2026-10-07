@@ -8,6 +8,7 @@ import {
   CalendarClock,
   FileSpreadsheet,
   FolderKanban,
+  HandCoins,
   HardHat,
   History,
   Landmark,
@@ -54,6 +55,7 @@ const NAV: NavEntry[] = [
   { view: 'staff-categories', label: 'Staff Categories', icon: Tags, perm: 'staff.view', keywords: 'job classification trades' },
   { view: 'attendance', label: 'Staff Attendance', icon: CalendarClock, perm: 'attendance.view', keywords: 'check in out timesheet hours' },
   { view: 'payroll', label: 'Payroll', icon: Wallet, perm: 'payroll.view', keywords: 'salary wages monthly payment deductions' },
+  { view: 'advances', label: 'Worker Advances', icon: HandCoins, perm: 'advances.view', keywords: 'advance loan worker deduction recovery installment outstanding' },
   { view: 'salary-sheet', label: 'Salary Sheet', icon: FileSpreadsheet, perm: 'payroll.view', keywords: 'monthly sheet print landscape' },
   { view: 'salary-summary', label: 'Staff Salary Summary', icon: ScrollText, perm: 'payroll.view', keywords: 'category breakdown report' },
   { view: 'client-salary-summary', label: 'Client Salary Summary', icon: ReceiptText, perm: 'payroll.view', keywords: 'client company original salary price manpower cost billing' },
@@ -79,6 +81,7 @@ type QuickAction = {
 
 const ACTIONS: QuickAction[] = [
   { view: 'payroll', label: 'Create Payroll', icon: Wallet, perm: 'payroll.create', keywords: 'new salary add wages', intent: 'create' },
+  { view: 'advances', label: 'Give Worker Advance', icon: HandCoins, perm: 'advances.create', keywords: 'new advance loan cash payment worker', intent: 'create' },
   { view: 'staff-list', label: 'Add New Staff', icon: HardHat, perm: 'staff.create', keywords: 'new employee worker hire', intent: 'create' },
   { view: 'projects', label: 'New Project', icon: FolderKanban, perm: 'projects.create', keywords: 'add construction site', intent: 'create' },
   { view: 'clients', label: 'New Client', icon: Building2, perm: 'clients.create', keywords: 'add customer company', intent: 'create' },
@@ -91,6 +94,7 @@ const ACTIONS: QuickAction[] = [
 const REPORTS: QuickAction[] = [
   { view: 'salary-summary', label: 'Staff Salary Summary Report', icon: ScrollText, perm: 'payroll.view', keywords: 'category share distribution' },
   { view: 'client-salary-summary', label: 'Client Salary Summary Report', icon: ReceiptText, perm: 'payroll.view', keywords: 'client company original price salary rollup' },
+  { view: 'advances', label: 'Worker Advance Ledger Report', icon: HandCoins, perm: 'advances.view', keywords: 'outstanding balance recovery ledger' },
   { view: 'accounts-summary', label: 'Financial Statement', icon: Landmark, perm: 'accounts.view', keywords: 'profit loss performance' },
   { view: 'dashboard', label: 'Financial Performance Chart', icon: BadgeDollarSign, perm: 'dashboard.view', keywords: 'income expense trend 6 months' },
 ]

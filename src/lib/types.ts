@@ -316,6 +316,91 @@ export type PayrollInput = {
 
 export type TransactionType = 'income' | 'expense'
 
+// ---------------------------------------------------------------------------
+// Worker advances
+// ---------------------------------------------------------------------------
+
+export type AdvanceStatus = 'pending' | 'partially_deducted' | 'deducted'
+export type AdvancePaymentMethod = 'cash' | 'bank_transfer'
+
+/** Advance row (GET /api/advances) — remaining is derived client-side. */
+export type AdvanceRow = {
+  id: string
+  amount: number
+  givenDate: string
+  paymentMethod: AdvancePaymentMethod
+  reference: string | null
+  deductionMonth: number
+  deductionYear: number
+  installments: number
+  deductedAmount: number
+  status: AdvanceStatus
+  createdAt: string
+  /** true when a finalized (paid) payroll already deducted from it → edit/delete blocked */
+  locked?: boolean
+  staff: { id: string; fullName: string; iqamaId: string; position?: string | null }
+}
+
+export type AdvanceListTotals = {
+  count: number
+  given: number
+  deducted: number
+  outstanding: number
+}
+
+/** GET /api/advances/summary — header cards + monthly given totals */
+export type AdvanceSummaryData = {
+  totals: AdvanceListTotals & { workers: number; pendingCount: number }
+  monthly: { label: string; month: number; year: number; given: number; count: number }[]
+}
+
+/** GET /api/advances/ledger?staffId — per-worker advance ledger */
+export type AdvanceLedgerData = {
+  staff: {
+    id: string
+    fullName: string
+    iqamaId: string
+    position: string | null
+    monthlySalary: number
+    status: StaffStatus
+  }
+  advances: AdvanceRow[]
+  deductions: {
+    id: string
+    advanceId: string
+    amount: number
+    month: number
+    year: number
+    payrollStatus: PayrollStatus
+    recovered: boolean
+    createdAt: string
+  }[]
+  totals: { given: number; deducted: number; outstanding: number }
+}
+
+/** GET /api/advances/payroll-preview — what the auto-deduction would apply */
+export type AdvancePayrollPreview = {
+  items: {
+    advanceId: string
+    reference: string
+    scheduled: number
+    remaining: number
+    installmentNo: number
+    installments: number
+  }[]
+  total: number
+}
+
+/** GET /api/advances/stale-payrolls — payrolls whose advance column is out of date */
+export type AdvanceStalePayroll = {
+  payrollId: string
+  staffName: string
+  month: number
+  year: number
+  stored: number
+  expected: number
+}
+
 export type TransactionCategoryRow = {
   id: string
   name: string
@@ -376,6 +461,8 @@ export type DashboardData = {
     totalExpense: number
     netBalance: number
     salaryPaid: number
+    /** Outstanding worker-advance balance (null without advances.view) */
+    advanceOutstanding: number | null
   }
   payrollStatus: {
     month: string
@@ -507,6 +594,7 @@ export type ViewKey =
   | 'staff-categories'
   | 'attendance'
   | 'payroll'
+  | 'advances'
   | 'salary-sheet'
   | 'salary-summary'
   | 'client-salary-summary'

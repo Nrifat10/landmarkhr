@@ -24,6 +24,7 @@ import {
   BarChart3,
   Building2,
   CheckCircle2,
+  HandCoins,
   ChevronsDown,
   ChevronsUp,
   Clock,
@@ -675,6 +676,18 @@ export function DashboardView() {
           onMoreInfo={() => setView('payroll')}
           moreInfoLabel="View payroll"
         />
+        {stats.advanceOutstanding !== null ? (
+          <StatCard
+            title="Total Advance Outstanding"
+            value={formatNumber(stats.advanceOutstanding)}
+            valuePrefix={currency}
+            sublabel="Worker advances not yet recovered"
+            icon={HandCoins}
+            tone="amber"
+            onMoreInfo={() => setView('advances')}
+            moreInfoLabel="View advances"
+          />
+        ) : null}
       </div>
 
       {/* IQAMA document alerts (expired / expiring within 90 days) */}

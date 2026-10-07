@@ -14,6 +14,7 @@ import {
   isResponse,
   logActivity,
 } from '@/lib/api-helpers'
+import { ensureRecoveryTransactions } from '@/lib/advance-service'
 
 const PAYROLL_INCLUDE = {
   staff: {
@@ -47,6 +48,18 @@ export async function POST(_req: NextRequest, { params }: Params) {
         data: { status: 'paid', payDate },
         include: PAYROLL_INCLUDE,
       })
+
+      // Finalizing the payroll recovers the worker advances it deducted —
+      // write the "Advance Recovery" income entries (and lock the advances).
+      await ensureRecoveryTransactions(
+        tx,
+        id,
+        payDate,
+        user.id,
+        payroll.staff.fullName,
+        payroll.month,
+        payroll.year
+      )
 
       const linked = await tx.transaction.findUnique({ where: { payrollId: id } })
       if (!linked) {

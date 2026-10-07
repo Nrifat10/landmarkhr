@@ -32,6 +32,7 @@ const VIEW_TITLES: Record<string, { title: string; subtitle: string }> = {
   'staff-categories': { title: 'Staff Categories', subtitle: 'Job categories & classifications' },
   attendance: { title: 'Staff Attendance', subtitle: 'Check-in / check-out records' },
   payroll: { title: 'Payroll', subtitle: 'Monthly payroll processing' },
+  advances: { title: 'Worker Advances', subtitle: 'Salary advances & payroll recovery' },
   'salary-sheet': { title: 'Salary Sheet', subtitle: 'Monthly payroll sheet & printing' },
   'salary-summary': { title: 'Staff Salary Summary', subtitle: 'Category-wise salary breakdown' },
   'client-salary-summary': { title: 'Client Salary Summary', subtitle: 'Original salary by client company' },

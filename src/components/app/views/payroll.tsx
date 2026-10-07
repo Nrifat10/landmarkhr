@@ -12,10 +12,12 @@ import {
   Download,
   FileText,
   FolderKanban,
+  HandCoins,
   Loader2,
   Pencil,
   Plus,
   ReceiptText,
+  RefreshCw,
   TrendingDown,
   TriangleAlert,
   Wallet,
@@ -75,6 +77,8 @@ import { can, useAppStore } from '@/lib/store'
 import {
   MONTHS,
   PAY_TYPE_LABELS,
+  type AdvancePayrollPreview,
+  type AdvanceStalePayroll,
   type DeductionType,
   type Paginated,
   type PayrollRow,
@@ -205,6 +209,11 @@ export function PayrollView() {
   const [meta, setMeta] = useState({ page: 1, pageSize: 10, total: 0, totalPages: 1 })
   const [loading, setLoading] = useState(true)
 
+  // Advances whose deduction month matches this period but whose payroll column
+  // is out of date (advance added/edited after the payroll was generated)
+  const [staleAdvances, setStaleAdvances] = useState<AdvanceStalePayroll[]>([])
+  const [recalculating, setRecalculating] = useState(false)
+
   const [projects, setProjects] = useState<ProjectRow[]>([])
   const [categories, setCategories] = useState<StaffCategory[]>([])
 
@@ -250,9 +259,52 @@ export function PayrollView() {
     }
   }, [debouncedSearch, projectFilter, categoryFilter, monthFilter, yearFilter, statusFilter, page, pageSize])
 
+  // Stale advance detection for the filtered period (concrete month + year only)
+  const loadStaleAdvances = useCallback(async () => {
+    if (monthFilter === 'all' || yearFilter === 'all') {
+      setStaleAdvances([])
+      return
+    }
+    try {
+      const stale = await api.get<AdvanceStalePayroll[]>(
+        `/api/advances/stale-payrolls${qs({ month: monthFilter, year: yearFilter })}`
+      )
+      setStaleAdvances(stale)
+    } catch {
+      setStaleAdvances([]) // non-critical — the banner simply hides
+    }
+  }, [monthFilter, yearFilter])
+
   useEffect(() => {
     void loadList()
   }, [loadList])
+
+  useEffect(() => {
+    void loadStaleAdvances()
+  }, [loadStaleAdvances, loadList])
+
+  // One click: re-sync the Advance Deduction column of every payroll in the period
+  async function handleRecalculateAdvances() {
+    if (recalculating || monthFilter === 'all' || yearFilter === 'all') return
+    setRecalculating(true)
+    try {
+      const res = await api.post<{ recalculated: number; changed: number }>(
+        '/api/advances/recalculate',
+        { month: Number(monthFilter), year: Number(yearFilter) }
+      )
+      toast.success(
+        res.changed > 0
+          ? `Recalculated advance deductions — ${res.changed} of ${res.recalculated} payroll record(s) updated`
+          : `Checked ${res.recalculated} payroll record(s) — all advance deductions are up to date`
+      )
+      void loadList()
+      void loadStaleAdvances()
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Recalculation failed')
+    } finally {
+      setRecalculating(false)
+    }
+  }
 
   // Filter dropdown data (projects + staff categories)
   useEffect(() => {
@@ -319,7 +371,7 @@ export function PayrollView() {
           'OT Rate',
           'Other Earnings',
           'Gross Pay',
-          'Advance',
+          'Advance Deduction',
           'Absent Penalty',
           'PT Amount',
           'Union Fees',
@@ -513,6 +565,38 @@ export function PayrollView() {
           className="sm:w-[140px]"
         />
       </FilterBar>
+
+      {/* Stale advance warning — advances changed after this payroll was generated */}
+      {staleAdvances.length > 0 ? (
+        <div className="flex flex-col gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3.5 text-amber-900 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-200 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex min-w-0 items-start gap-3">
+            <TriangleAlert className="mt-0.5 h-5 w-5 shrink-0" />
+            <div className="min-w-0">
+              <p className="text-sm font-semibold">
+                {staleAdvances.length} payroll record{staleAdvances.length === 1 ? '' : 's'} need
+                recalculation
+              </p>
+              <p className="mt-0.5 text-xs leading-relaxed">
+                Worker advances were added or changed after this payroll was generated:{' '}
+                {staleAdvances.slice(0, 3).map((s) => s.staffName).join(', ')}
+                {staleAdvances.length > 3 ? ` +${staleAdvances.length - 3} more` : ''}. The Advance
+                Deduction column is out of date.
+              </p>
+            </div>
+          </div>
+          {canEdit ? (
+            <Button
+              size="sm"
+              className="h-9 shrink-0 border-amber-300 bg-amber-500 text-white shadow-sm hover:bg-amber-600 dark:border-amber-800 dark:bg-amber-600 dark:hover:bg-amber-500"
+              onClick={handleRecalculateAdvances}
+              disabled={recalculating}
+            >
+              {recalculating ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}
+              Recalculate Payroll
+            </Button>
+          ) : null}
+        </div>
+      ) : null}
 
       {/* Totals for the current filter (3-up on mobile to save vertical space) */}
       <div className="grid grid-cols-3 gap-2 sm:gap-3">
@@ -903,6 +987,10 @@ function PayrollFormDialog({
   const [filling, setFilling] = useState(false)
   const [form, setForm] = useState<FormState>(() => defaultForm(defaultPayType))
 
+  // Automatic advance deduction preview for the selected staff + period
+  const [advancePreview, setAdvancePreview] = useState<AdvancePayrollPreview | null>(null)
+  const [previewLoading, setPreviewLoading] = useState(false)
+
   const yearOptions = useMemo(() => {
     const y = new Date().getFullYear()
     return Array.from({ length: 5 }, (_, i) => String(y - 2 + i))
@@ -968,20 +1056,72 @@ function PayrollFormDialog({
     [staffOptions, form.staffId]
   )
 
-  // LIVE calculation — same pure function the server uses to recalculate
-  const calc = calcPayroll({
-    totalHours: toNum(form.totalHours),
-    hourlyRate: toNum(form.hourlyRate),
-    overtimeHours: toNum(form.overtimeHours),
-    overtimeRate: toNum(form.overtimeRate),
-    otherEarnings: toNum(form.otherEarnings),
-    advance: toNum(form.advance),
-    absentPenalty: toNum(form.absentPenalty),
-    ptAmount: toNum(form.ptAmount),
-    unionFees: toNum(form.unionFees),
-    otherDeductionValue: toNum(form.otherDeductionValue),
-    otherDeductionType: form.otherDeductionType,
-  })
+  // Fetch the auto-deduction preview whenever staff + period are set
+  useEffect(() => {
+    if (!open || !form.staffId || !form.month || !form.year) {
+      setAdvancePreview(null)
+      return
+    }
+    let cancelled = false
+    setPreviewLoading(true)
+    api
+      .get<AdvancePayrollPreview>(
+        `/api/advances/payroll-preview${qs({
+          staffId: form.staffId,
+          month: form.month,
+          year: form.year,
+          excludePayrollId: editing?.id ?? '',
+        })}`
+      )
+      .then((res) => {
+        if (!cancelled) setAdvancePreview(res)
+      })
+      .catch(() => {
+        if (!cancelled) setAdvancePreview(null)
+      })
+      .finally(() => {
+        if (!cancelled) setPreviewLoading(false)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [open, form.staffId, form.month, form.year, editing])
+
+  const autoAdvanceActive = Boolean(advancePreview && advancePreview.items.length > 0)
+
+  /** Live calc helper — same pure function the server uses to recalculate. */
+  function calcPayrollWith(advance: number) {
+    return calcPayroll({
+      totalHours: toNum(form.totalHours),
+      hourlyRate: toNum(form.hourlyRate),
+      overtimeHours: toNum(form.overtimeHours),
+      overtimeRate: toNum(form.overtimeRate),
+      otherEarnings: toNum(form.otherEarnings),
+      advance,
+      absentPenalty: toNum(form.absentPenalty),
+      ptAmount: toNum(form.ptAmount),
+      unionFees: toNum(form.unionFees),
+      otherDeductionValue: toNum(form.otherDeductionValue),
+      otherDeductionType: form.otherDeductionType,
+    })
+  }
+
+  // Base calc without the advance — derives the salary room available for it.
+  const calc0 = calcPayrollWith(0)
+  const otherDeductionsLive =
+    calc0.otherDeductionAmount +
+    toNum(form.absentPenalty) +
+    toNum(form.ptAmount) +
+    toNum(form.unionFees)
+  const advanceRoom = Math.max(0, round2(calc0.grossPay - otherDeductionsLive))
+
+  // When worker advances match the period, their capped total REPLACES the
+  // manual value (the field is locked); otherwise the manual value applies.
+  const effectiveAdvance = autoAdvanceActive
+    ? round2(Math.min(advancePreview!.total, advanceRoom))
+    : toNum(form.advance)
+
+  const calc = calcPayrollWith(effectiveAdvance)
 
   function handleSelectStaff(id: string) {
     const staff = staffOptions.find((s) => s.id === id)
@@ -1041,7 +1181,7 @@ function PayrollFormDialog({
         overtimeHours: toNum(form.overtimeHours),
         overtimeRate: toNum(form.overtimeRate),
         otherEarnings: toNum(form.otherEarnings),
-        advance: toNum(form.advance),
+        advance: round2(effectiveAdvance),
         absentPenalty: toNum(form.absentPenalty),
         ptAmount: toNum(form.ptAmount),
         unionFees: toNum(form.unionFees),
@@ -1053,11 +1193,16 @@ function PayrollFormDialog({
         taxCode: form.taxCode || 'N/A',
       }
       const res = editing
-        ? await api.put<PayrollRow & { warning?: string }>(`/api/payrolls/${editing.id}`, body)
-        : await api.post<PayrollRow & { warning?: string }>('/api/payrolls', body)
+        ? await api.put<PayrollRow & { warning?: string; advanceApplied?: { count: number; total: number } }>(`/api/payrolls/${editing.id}`, body)
+        : await api.post<PayrollRow & { warning?: string; advanceApplied?: { count: number; total: number } }>('/api/payrolls', body)
       toast.success(
         `${editing ? 'Payroll updated' : 'Payroll created'} — net ${formatMoney(res.netPay, currency)}`
       )
+      if (res.advanceApplied && res.advanceApplied.count > 0) {
+        toast.info(
+          `Advance deduction applied: ${formatMoney(res.advanceApplied.total, currency)} from ${res.advanceApplied.count} worker advance${res.advanceApplied.count === 1 ? '' : 's'}`
+        )
+      }
       if (res.warning) toast.warning(res.warning)
       onSaved()
     } catch (e) {
@@ -1278,13 +1423,60 @@ function PayrollFormDialog({
               value={form.otherEarnings}
               onChange={(v) => setField({ otherEarnings: v })}
             />
-            <NumberField
-              id="payroll-advance"
-              label="Advance"
-              step={0.01}
-              value={form.advance}
-              onChange={(v) => setField({ advance: v })}
-            />
+            <div className="space-y-2 sm:col-span-2">
+              <Label htmlFor="payroll-advance">Advance Deduction</Label>
+              <Input
+                id="payroll-advance"
+                type="number"
+                inputMode="decimal"
+                step={0.01}
+                min={0}
+                placeholder="0.00"
+                value={autoAdvanceActive ? String(round2(effectiveAdvance)) : form.advance}
+                onChange={(e) => setField({ advance: e.target.value })}
+                disabled={autoAdvanceActive}
+                className={cn(autoAdvanceActive && 'cursor-not-allowed opacity-80')}
+              />
+              {previewLoading ? (
+                <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                  <Loader2 className="h-3 w-3 animate-spin" />
+                  Checking worker advances for {monthName(Number(form.month))} {form.year}…
+                </p>
+              ) : autoAdvanceActive && advancePreview ? (
+                <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5 text-xs leading-relaxed text-amber-800 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-300">
+                  <p className="flex items-center gap-1.5 font-semibold">
+                    <HandCoins className="h-3.5 w-3.5" />
+                    Auto-applied from {advancePreview.items.length} worker advance
+                    {advancePreview.items.length === 1 ? '' : 's'}
+                  </p>
+                  <ul className="mt-1.5 space-y-0.5">
+                    {advancePreview.items.map((i) => (
+                      <li key={i.advanceId} className="flex items-center justify-between gap-2">
+                        <span className="font-mono">{i.reference}</span>
+                        <span className="tabular-nums">
+                          {formatMoney(i.scheduled, currency)}
+                          {i.installments > 1 ? ` (installment ${i.installmentNo}/${i.installments})` : ''}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                  {effectiveAdvance < advancePreview.total - 0.005 ? (
+                    <p className="mt-1.5 border-t border-amber-200 pt-1.5 dark:border-amber-900">
+                      Capped to the available salary ({formatMoney(advanceRoom, currency)}) —{' '}
+                      {formatMoney(round2(advancePreview.total - effectiveAdvance), currency)} carries
+                      to the next month.
+                    </p>
+                  ) : null}
+                  <p className="mt-1.5 text-[11px] text-amber-700 dark:text-amber-400">
+                    Managed in Worker Advances — edit the advance there, not here.
+                  </p>
+                </div>
+              ) : (
+                <p className="text-xs text-muted-foreground">
+                  No scheduled worker advances for this period — enter a manual amount if needed.
+                </p>
+              )}
+            </div>
             <NumberField
               id="payroll-absent-penalty"
               label="Absent Penalty"
@@ -1368,7 +1560,7 @@ function PayrollFormDialog({
                 <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                   Deductions
                 </p>
-                <CalcRow label="Advance" value={formatMoney(toNum(form.advance), currency)} />
+                <CalcRow label="Advance Deduction" value={formatMoney(effectiveAdvance, currency)} />
                 <CalcRow
                   label="Absent Penalty"
                   value={formatMoney(toNum(form.absentPenalty), currency)}

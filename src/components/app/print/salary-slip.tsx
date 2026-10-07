@@ -296,7 +296,7 @@ function SalarySlipDocument({ payroll, settings }: { payroll: SlipPayroll; setti
             </thead>
             <tbody>
               <tr>
-                <td className="border border-neutral-300 px-2.5 py-1.5">Staff Advance</td>
+                <td className="border border-neutral-300 px-2.5 py-1.5">Advance Deduction</td>
                 <td className="border border-neutral-300 px-2.5 py-1.5 text-right tabular-nums">
                   {formatMoney(p.advance, currency)}
                 </td>

@@ -18,6 +18,10 @@ import {
   toInt,
   parseDate,
 } from '@/lib/api-helpers'
+import {
+  syncPayrollAdvanceDeductions,
+  otherDeductionsOf,
+} from '@/lib/advance-service'
 
 const PAYROLL_INCLUDE = {
   staff: {
@@ -194,7 +198,7 @@ export async function POST(req: NextRequest) {
           overtimeHours: input.overtimeHours,
           overtimeRateSnapshot: input.overtimeRate,
           otherEarnings: input.otherEarnings,
-          advance: input.advance,
+          advance: 0, // placeholder — set below from the advance module
           absentPenalty: input.absentPenalty,
           ptAmount: input.ptAmount,
           unionFees: input.unionFees,
@@ -208,6 +212,56 @@ export async function POST(req: NextRequest) {
           payType: input.payType,
           taxCode,
           createdBy: user.id,
+        },
+        include: PAYROLL_INCLUDE,
+      })
+
+      // AUTOMATIC ADVANCE DEDUCTION — match advances whose deduction month
+      // equals this payroll month, cap to the available salary room, link them.
+      const otherDeductions = otherDeductionsOf({
+        absentPenalty: input.absentPenalty,
+        ptAmount: input.ptAmount,
+        unionFees: input.unionFees,
+        otherDeductionValue: input.otherDeductionValue,
+        otherDeductionType: input.otherDeductionType,
+        grossPay: calc.grossPay,
+      })
+      const sync = await syncPayrollAdvanceDeductions({
+        tx,
+        payrollId: payroll.id,
+        staffId: input.staffId,
+        month: input.month,
+        year: input.year,
+        grossPay: calc.grossPay,
+        otherDeductions,
+        isPaid: input.status === 'paid',
+        payDate,
+        operatorUserId: user.id,
+        staffName: staff.fullName,
+      })
+      // matching advances exist → their capped total REPLACES the manual value
+      const finalAdvance = sync.items.length ? sync.advanceTotal : input.advance
+      const finalCalc = calcPayroll({
+        totalHours: input.totalHours,
+        hourlyRate: input.hourlyRate,
+        overtimeHours: input.overtimeHours,
+        overtimeRate: input.overtimeRate,
+        otherEarnings: input.otherEarnings,
+        advance: finalAdvance,
+        absentPenalty: input.absentPenalty,
+        ptAmount: input.ptAmount,
+        unionFees: input.unionFees,
+        otherDeductionValue: input.otherDeductionValue,
+        otherDeductionType: input.otherDeductionType,
+      })
+
+      const finalPayroll = await tx.payroll.update({
+        where: { id: payroll.id },
+        data: {
+          advance: finalAdvance,
+          grossPay: round2(finalCalc.grossPay),
+          totalDeductions: round2(finalCalc.totalDeductions),
+          netPay: round2(finalCalc.netPay),
         },
         include: PAYROLL_INCLUDE,
       })
@@ -226,7 +280,7 @@ export async function POST(req: NextRequest) {
           data: {
             type: 'expense',
             title: `Salary Payment: ${staff.fullName}`,
-            amount: round2(calc.netPay),
+            amount: round2(finalCalc.netPay),
             transactionCategoryId: salaryCategory.id,
             projectId,
             operatorUserId: user.id,
@@ -237,7 +291,7 @@ export async function POST(req: NextRequest) {
         })
       }
 
-      return payroll
+      return { payroll: finalPayroll, sync }
     })
 
     await logActivity({
@@ -248,14 +302,26 @@ export async function POST(req: NextRequest) {
         input.status === 'paid'
           ? `Salary Payment: ${staff.fullName} — ${input.month}/${input.year}`
           : `Payroll created: ${staff.fullName} — ${input.month}/${input.year}`,
-      amount: input.status === 'paid' ? round2(calc.netPay) : null,
+      amount: input.status === 'paid' ? round2(created.payroll.netPay) : null,
     })
 
+    const advanceCapped = created.sync.items.some((i) => i.applied < i.scheduled - 0.005)
+
     return ok({
-      ...serializePayroll(created),
-      ...(calc.negativeWarning
-        ? { warning: 'Net pay computed as negative and was clamped to 0' }
+      ...serializePayroll(created.payroll),
+      ...(created.sync.items.length
+        ? {
+            advanceApplied: {
+              count: created.sync.items.filter((i) => i.applied > 0).length,
+              total: round2(created.sync.advanceTotal),
+            },
+          }
         : {}),
+      ...(advanceCapped
+        ? { warning: 'Advance deduction was capped to the available salary — the remaining balance carries to the next month' }
+        : calc.negativeWarning
+          ? { warning: 'Net pay computed as negative and was clamped to 0' }
+          : {}),
     })
   } catch {
     return serverError()

@@ -123,6 +123,7 @@ model Staff {
   projects    ProjectStaff[]
   attendances Attendance[]
   payrolls    Payroll[]
+  advances    WorkerAdvance[]
 
   @@index([staffCategoryId])
   @@index([status])
@@ -186,6 +187,7 @@ model Payroll {
   updatedAt           DateTime @updatedAt
 
   salaryTransaction   Transaction?
+  advanceDeductions   PayrollAdvanceDeduction[]
 
   @@unique([staffId, projectId, month, year])
   @@index([staffId, month, year])
@@ -220,12 +222,57 @@ model Transaction {
   description           String?
   payrollId             String?             @unique
   payroll               Payroll?            @relation(fields: [payrollId], references: [id], onDelete: Cascade)
+  advancePayment        WorkerAdvance?      @relation("AdvancePayment")
+  advanceRecoveries     PayrollAdvanceDeduction[]
   createdAt             DateTime            @default(now())
   updatedAt             DateTime            @updatedAt
 
   @@index([type, transactionDate])
   @@index([projectId])
   @@index([transactionCategoryId])
+}
+
+// Worker salary advance (money given to a worker, recovered via payroll deductions)
+model WorkerAdvance {
+  id             String        @id @default(cuid())
+  staffId        String
+  staff          Staff         @relation(fields: [staffId], references: [id])
+  amount         Float // original advance amount (SAR)
+  givenDate      DateTime // date the advance was handed out
+  paymentMethod  String        @default("cash") // cash | bank_transfer
+  reference      String? // notes / reference (voucher no, transfer id…)
+  deductionMonth Int // first deduction month 1-12
+  deductionYear  Int // first deduction year
+  installments   Int           @default(1) // split across N months (1 = single deduction)
+  deductedAmount Float         @default(0) // recovered so far (pending + paid payrolls)
+  status         String        @default("pending") // pending | partially_deducted | deducted
+  transactionId  String?       @unique // linked "Advance to Workers" expense entry
+  transaction    Transaction?  @relation("AdvancePayment", fields: [transactionId], references: [id], onDelete: SetNull)
+  createdById    String?
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  payrollDeductions PayrollAdvanceDeduction[]
+
+  @@index([staffId])
+  @@index([deductionYear, deductionMonth])
+  @@index([status])
+}
+
+// Per-payroll recovery of a worker advance (links a payroll to the advances it deducted)
+model PayrollAdvanceDeduction {
+  id                   String        @id @default(cuid())
+  payrollId            String
+  payroll              Payroll       @relation(fields: [payrollId], references: [id], onDelete: Cascade)
+  advanceId            String
+  advance              WorkerAdvance @relation(fields: [advanceId], references: [id], onDelete: Cascade)
+  amount               Float // amount actually deducted from this advance in this payroll
+  recoveryTransactionId String?      @unique // income entry reversing the advance when payroll is paid
+  recoveryTransaction  Transaction?  @relation(fields: [recoveryTransactionId], references: [id], onDelete: SetNull)
+  createdAt            DateTime      @default(now())
+
+  @@unique([payrollId, advanceId])
+  @@index([advanceId])
 }
 
 model ActivityLog {
