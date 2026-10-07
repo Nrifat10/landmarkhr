@@ -427,7 +427,7 @@ export function AdvancesView() {
             valuePrefix={currency}
             sublabel={`${summary.totals.count} advance${summary.totals.count === 1 ? '' : 's'} given`}
             icon={Wallet}
-            tone="blue"
+            tone="navy"
           />
           <StatCard
             title="Recovered via Payroll"

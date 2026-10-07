@@ -623,7 +623,7 @@ export function DashboardView() {
           value={stats.totalStaff.toLocaleString()}
           sublabel="Active workforce members"
           icon={Users}
-          tone="blue"
+          tone="navy"
           onMoreInfo={() => setView('staff-list')}
           moreInfoLabel="View staff"
         />
@@ -662,7 +662,7 @@ export function DashboardView() {
           valuePrefix={currency}
           sublabel="Income minus expense"
           icon={Wallet}
-          tone={stats.netBalance < 0 ? 'red' : 'blue'}
+          tone={stats.netBalance < 0 ? 'red' : 'gold'}
           onMoreInfo={() => setView('accounts-summary')}
           moreInfoLabel="View summary"
         />

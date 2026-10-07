@@ -890,3 +890,40 @@ Stage Summary:
 - Round 17 complete: full "Advance for Workers" module delivered in the requested 3 steps — entry/list/ledger UI, automatic payroll integration (month+year matching, never-negative capping with carry-over, finalize-lock/reopen-revert, stale warning + one-click recalculate), accounting double-entry (Advance to Workers expense ↔ Advance Recovery income), role permissions + audit log, dashboard outstanding card, worker-profile Advance tab, PDF/Excel export, mobile-responsive. 23 files touched (11 new), all 4 requested test-case categories verified end-to-end plus 7 additional bugs caught and fixed during QA.
 - Design decisions worth remembering: payroll.advance is authoritative-from-module whenever ANY matching advance exists (manual fallback only when none match); deduction rows update balances on generation (pending) but the EDIT/DELETE lock applies only after a PAID payroll references the advance; carry-over continues past the installment window until the balance is fully recovered (by design, per "carry the remaining balance to the next month").
 - Known non-blocking items (carried): backup import/restore; expiry window as setting; LICENSE file; toStaffRow dedup.
+
+---
+Task ID: 18
+Agent: main (Z.ai Code)
+Task: Rebrand entire UI to follow the uploaded company logo (IMG_0080.PNG — LANDMARK INTER GULF LLC)
+
+Work Log:
+- VLM-analyzed the uploaded logo: ML monogram (navy + gold), "LANDMARK" bold wordmark, "— INTER GULF LLC —" gold letterspaced with flanking lines. Brand palette: navy #0F1F3D, gold #D4AF37, cream #F4F4F0, geometric sans, corporate-luxury style.
+- Processed logo assets (PIL): white-bg removed via alpha-unblend (distance-from-white alpha + fg un-blend, VLM-verified no halos) → public/logo.png (full lockup 1600px, transparent), public/logo-mark.png (ML monogram 720px, transparent), src/app/icon.png (512 favicon, mark on white). Replaced z-cdn favicon reference.
+- globals.css full theme overhaul: light = cream bg + white cards + NAVY primary + deep-gold ring + soft-gold accent wash + warm borders + brand-navy sidebar with GOLD active tokens; dark = deep-navy night + GOLD primary (signature) + gold ring; charts navy/gold/sage/terracotta; new --gold/--gold-foreground/--gold-deep/--gold-soft tokens mapped in @theme inline (bg-gold, text-gold... utilities); ::selection gold wash; .gold-rule hairline + .text-gold-gradient utilities; warm scrollbar.
+- Default logo wiring: settings API GET + zustand store default logo = '/logo-mark.png' (user uploads still override); layout.tsx favicon → src/app/icon.png.
+- sidebar.tsx: brand block = white rounded-xl badge with mark (object-contain) + white company name + gold uppercase letterspaced subtitle + gold hairline; icon-collapse responsive (badge shrinks, text hides); ACTIVE menu + submenu items = gold pill (bg-sidebar-primary + navy text) — fixed specificity by using data-[active=true]: prefixed classes so twMerge dedupes the base sidebar-accent rules (plain bg-sidebar-primary lost to data-active selector).
+- login-screen.tsx: navy gradient bg + gold glows + gold grid threads; desktop brand panel = white card with FULL lockup (/logo.png) + gold-ruled "WORKFORCE · PAYROLL · ACCOUNTS" tagline; mobile header = white badge mark + gold subtitle; blue/indigo remnants removed.
+- topbar.tsx: gold hairline (.gold-rule) under the header.
+- stat-card.tsx: 'blue' tone → navy gradient, new 'gold' tone; ring-1 on icon chips; all views updated (dashboard, advances, salary-summary, client-salary-summary, accounts-summary: blue→navy, net-balance/net→gold).
+- Print letterheads: salary-slip.tsx + salary-sheet-print.tsx — logo mark (h-16/20 object-contain), navy company name, gold uppercase doc subtitle, navy rule + short gold accent bar, SALARY PAY SLIP badge navy with gold left border.
+- settings.tsx: logo preview always shows (default mark or custom) + "DEFAULT" pill; "Remove" → "Reset to Default" (null clears row, GET falls back to brand mark); RotateCcw icon.
+- De-blued remaining hardcodes: avatar palette first slot → gold-soft; payroll rate badges → gold wash; StatusBadge active → navy tint (dark-aware); projects status donut active/completed → navy/gold.
+- DB: deleted stale user-uploaded logo row (old low-res 256×172 version of same logo on dark bg) so the new high-res transparent mark serves everywhere.
+- Ops: dev server was serving a STALE CSS chunk after globals.css edit → full restart required; first restart OOM-killed (2GB spike after cache wipe) → closed agent-browser, restarted detached, waited for warmup. All good now.
+
+QA (agent-browser + VLM + pixel sampling):
+- Login screen: navy/gold + white logo card — PASS (Sign in button initially rendered OLD blue due to stale CSS — fixed by restart; verified #0f1f3d served).
+- Dashboard light: cream bg, navy sidebar, white logo badge, gold subtitle — PASS; active item pixel-sampled = exact #D4AF37 gold pill with navy text (found & fixed the data-active specificity bug — was rendering as plain navy-hover).
+- Dark mode: deep navy bg + GOLD primary buttons + gold active item (pixel-verified 1728 gold px) — PASS.
+- Collapsed icon sidebar: badge shrinks to centered white square, no overflow — PASS.
+- Submenu active (Worker Advances) in dark: gold (pixel-verified) — PASS.
+- Mobile 390px: no overflow, FAB accessible — PASS.
+- Salary slip dialog: branded letterhead (mark + navy rule + gold bar + navy/gold badge) — PASS.
+- Salary sheet print preview: branded header + clean table — PASS.
+- Settings: DEFAULT pill on logo, Reset button only for custom logos — PASS.
+- Favicon /icon.png 200 + linked in HTML head — PASS. lint 0 errors. dev.log clean.
+
+Stage Summary:
+- Round 18 complete: full brand rebrand following the uploaded company logo. Exact palette (navy #0F1F3D / gold #D4AF37 / cream #F4F4F0) across light+dark themes, sidebar, login, topbar, stat cards, print documents, settings, favicon. Real logo assets generated (transparent full lockup + monogram mark) and wired as defaults (user uploads still override).
+- Key decisions: settings.logo defaults to the square MARK (fits all square slots); login brand panel uses the FULL lockup explicitly; dark-mode primary is gold (signature look); sidebar active items are gold pills with navy text.
+- Gotchas for future agents: (1) globals.css changes may need a dev-server restart to bust stale Turbopack CSS chunks — verify served CSS values via curl; (2) restarts after `rm -rf .next/dev/cache` can OOM — close agent-browser first and warm up patiently; (3) shadcn sidebar active overrides MUST use data-[active=true]: prefixed classes to beat base specificity (twMerge then dedupes correctly).

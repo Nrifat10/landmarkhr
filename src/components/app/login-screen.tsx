@@ -12,7 +12,6 @@ import {
   AlertTriangle,
   ArrowRight,
   DatabaseZap,
-  GalleryVerticalEnd,
   Loader2,
   Lock,
   LogIn,
@@ -252,25 +251,25 @@ export function LoginScreen() {
   )
 
   return (
-    <div className="relative flex min-h-screen items-center justify-center overflow-hidden bg-gradient-to-br from-slate-950 via-blue-950 to-slate-900 p-4">
-      {/* decorative grid */}
+    <div className="relative flex min-h-screen items-center justify-center overflow-hidden bg-gradient-to-br from-[#0B1832] via-[#0F1F3D] to-[#0A1226] p-4">
+      {/* decorative grid — gold threads */}
       <div
         aria-hidden
-        className="pointer-events-none absolute inset-0 opacity-[0.35]"
+        className="pointer-events-none absolute inset-0 opacity-30"
         style={{
           backgroundImage:
-            'linear-gradient(rgba(96,165,250,0.08) 1px, transparent 1px), linear-gradient(90deg, rgba(96,165,250,0.08) 1px, transparent 1px)',
+            'linear-gradient(rgba(212,175,55,0.07) 1px, transparent 1px), linear-gradient(90deg, rgba(212,175,55,0.07) 1px, transparent 1px)',
           backgroundSize: '44px 44px',
         }}
       />
-      {/* soft corner glows */}
+      {/* soft corner glows — gold + navy */}
       <div
         aria-hidden
-        className="pointer-events-none absolute -left-32 -top-32 h-96 w-96 rounded-full bg-blue-500/10 blur-3xl"
+        className="pointer-events-none absolute -left-32 -top-32 h-96 w-96 rounded-full bg-[#D4AF37]/10 blur-3xl"
       />
       <div
         aria-hidden
-        className="pointer-events-none absolute -bottom-32 -right-32 h-96 w-96 rounded-full bg-indigo-400/10 blur-3xl"
+        className="pointer-events-none absolute -bottom-32 -right-32 h-96 w-96 rounded-full bg-[#2A4A8C]/20 blur-3xl"
       />
 
       <motion.div
@@ -280,46 +279,58 @@ export function LoginScreen() {
         className="relative grid w-full max-w-4xl gap-8 md:grid-cols-2"
       >
         {/* Brand panel (desktop) */}
-        <div className="hidden flex-col justify-between rounded-2xl border border-white/10 bg-white/5 p-8 backdrop-blur md:flex">
-          <div className="flex items-center gap-3">
-            <div className="flex h-12 w-12 items-center justify-center overflow-hidden rounded-xl bg-blue-600 text-white shadow-lg">
-              {settings.logo ? (
-                <Image src={settings.logo} alt={settings.companyName} width={48} height={48} className="h-full w-full object-cover" unoptimized />
-              ) : (
-                <GalleryVerticalEnd className="h-6 w-6" />
-              )}
+        <div className="hidden flex-col justify-between rounded-2xl border border-white/10 bg-white/[0.04] p-8 backdrop-blur md:flex">
+          <div>
+            {/* Full logo lockup on a white card so the brand prints true */}
+            <div className="rounded-2xl bg-white p-6 shadow-2xl shadow-black/40">
+              <Image
+                src="/logo.png"
+                alt={`${settings.companyName} — LANDMARK INTER GULF LLC`}
+                width={480}
+                height={322}
+                priority
+                className="h-auto w-full"
+                unoptimized
+              />
             </div>
-            <div>
-              <p className="text-lg font-bold text-white">{settings.companyName}</p>
-              <p className="text-sm text-blue-200/80">Workforce, Payroll & Accounts</p>
-            </div>
+            {/* gold-ruled tagline, echoing the logo's flanking lines */}
+            <p className="mt-5 flex items-center justify-center gap-3 text-[11px] font-semibold uppercase tracking-[0.32em] text-[#D4AF37]">
+              <span className="h-px w-10 bg-gradient-to-r from-transparent to-[#D4AF37]/70" aria-hidden />
+              Workforce · Payroll · Accounts
+              <span className="h-px w-10 bg-gradient-to-l from-transparent to-[#D4AF37]/70" aria-hidden />
+            </p>
           </div>
           <div className="space-y-4">
             <div className="flex items-start gap-3">
-              <ShieldCheck className="mt-0.5 h-5 w-5 shrink-0 text-blue-400" />
-              <p className="text-sm leading-relaxed text-blue-100/90">
+              <ShieldCheck className="mt-0.5 h-5 w-5 shrink-0 text-[#D4AF37]" />
+              <p className="text-sm leading-relaxed text-[#E9E6DC]/85">
                 Complete manpower management: projects, staff, attendance, monthly payroll,
                 salary sheets and company accounting — in SAR.
               </p>
             </div>
           </div>
-          <p className="text-xs text-blue-200/75">
+          <p className="text-xs text-[#E9E6DC]/60">
             {settings.address} · {settings.phone}
           </p>
         </div>
 
         {/* Mobile brand header */}
         <div className="flex items-center gap-3 md:hidden">
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-blue-600 text-white shadow-lg">
-            {settings.logo ? (
-              <Image src={settings.logo} alt={settings.companyName} width={40} height={40} className="h-full w-full object-cover" unoptimized />
-            ) : (
-              <GalleryVerticalEnd className="h-5 w-5" />
-            )}
+          <div className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-white shadow-lg ring-1 ring-black/10">
+            <Image
+              src={settings.logo ?? '/logo-mark.png'}
+              alt={settings.companyName}
+              width={48}
+              height={48}
+              className="h-full w-full object-contain p-1"
+              unoptimized
+            />
           </div>
           <div className="min-w-0">
             <p className="truncate text-base font-bold leading-tight text-white">{settings.companyName}</p>
-            <p className="truncate text-xs text-blue-200/80">Workforce, Payroll & Accounts</p>
+            <p className="truncate text-[10px] font-semibold uppercase tracking-[0.18em] text-[#D4AF37]">
+              Workforce · Payroll · Accounts
+            </p>
           </div>
         </div>
 

@@ -1,7 +1,7 @@
 'use client'
 
 import { useRef, useState } from 'react'
-import { Building2, DatabaseBackup, ImagePlus, Loader2, Save, ShieldCheck, Trash2 } from 'lucide-react'
+import { Building2, DatabaseBackup, ImagePlus, Loader2, RotateCcw, Save, ShieldCheck } from 'lucide-react'
 import { toast } from 'sonner'
 import { api, ApiError } from '@/lib/api-client'
 import { useAppStore, can } from '@/lib/store'
@@ -287,17 +287,18 @@ export function SettingsView() {
             <div className="space-y-2">
               <Label>Company Logo</Label>
               <div className="flex flex-wrap items-center gap-4">
-                {form.logo ? (
+                <div className="relative">
                   <img
-                    src={form.logo}
+                    src={form.logo ?? '/logo-mark.png'}
                     alt="Company logo"
-                    className="h-16 w-16 rounded-lg border object-cover"
+                    className="h-16 w-16 rounded-lg border bg-white object-contain p-1"
                   />
-                ) : (
-                  <div className="flex h-16 w-16 items-center justify-center rounded-lg border bg-muted">
-                    <Building2 className="h-7 w-7 text-muted-foreground" />
-                  </div>
-                )}
+                  {(!form.logo || form.logo === '/logo-mark.png') ? (
+                    <span className="absolute -bottom-2 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-full border bg-gold-soft px-1.5 py-px text-[9px] font-semibold uppercase tracking-wide text-accent-foreground">
+                      Default
+                    </span>
+                  ) : null}
+                </div>
                 <div className="flex flex-wrap items-center gap-2">
                   <input
                     ref={logoInputRef}
@@ -321,22 +322,22 @@ export function SettingsView() {
                     )}
                     Upload Logo
                   </Button>
-                  {form.logo ? (
+                  {form.logo && form.logo !== '/logo-mark.png' ? (
                     <Button
                       type="button"
                       variant="outline"
                       onClick={() => setField('logo', null)}
                       disabled={!canEdit}
-                      className="text-destructive hover:bg-destructive/10 hover:text-destructive"
                     >
-                      <Trash2 className="h-4 w-4" />
-                      Remove
+                      <RotateCcw className="h-4 w-4" />
+                      Reset to Default
                     </Button>
                   ) : null}
                 </div>
               </div>
               <p className="text-xs text-muted-foreground">
                 Shown in the sidebar and on printed documents. Images are resized to 256 px.
+                Removing a custom logo restores the Landmark Inter Gulf brand mark.
               </p>
             </div>
           </div>

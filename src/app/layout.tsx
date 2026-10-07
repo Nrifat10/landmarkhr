@@ -18,9 +18,7 @@ export const metadata: Metadata = {
   description:
     "Admin system for construction workforce supply: projects, staff, attendance, monthly payroll, salary slips & sheets, and company accounting (SAR).",
   keywords: ["workforce", "payroll", "construction", "SAR", "salary sheet", "attendance"],
-  icons: {
-    icon: "https://z-cdn.chatglm.cn/z-ai/static/logo.svg",
-  },
+  // favicon: src/app/icon.png (brand ML monogram) is auto-detected by Next.js
 };
 
 export default function RootLayout({

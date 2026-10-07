@@ -4,7 +4,7 @@ import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/utils'
 
 export type BadgeKind =
-  | 'active'      // blue
+  | 'active'      // navy (brand)
   | 'pending'     // amber
   | 'paid'        // green
   | 'inactive'    // gray
@@ -15,7 +15,7 @@ export type BadgeKind =
 
 export function StatusBadge({ kind, label, className }: { kind: BadgeKind; label?: string; className?: string }) {
   const styles: Record<BadgeKind, string> = {
-    active: 'border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-900 dark:bg-blue-950 dark:text-blue-300',
+    active: 'border-navy/25 bg-navy/8 text-primary dark:border-white/20 dark:bg-white/10 dark:text-white',
     pending: 'border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-300',
     paid: 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900 dark:bg-emerald-950 dark:text-emerald-300',
     inactive: 'border-gray-200 bg-gray-100 text-gray-600 dark:border-gray-800 dark:bg-gray-800/60 dark:text-gray-400',

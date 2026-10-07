@@ -211,7 +211,7 @@ export function ClientSalarySummaryView() {
               title="Client Companies"
               value={String(cards.totalClients)}
               icon={Building2}
-              tone="blue"
+              tone="navy"
               sublabel="Clients with deployed manpower"
             />
             <StatCard

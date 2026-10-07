@@ -119,7 +119,9 @@ export function Topbar({ onOpenPalette }: { onOpenPalette: () => void }) {
         <Separator orientation="vertical" className="!h-5" />
         <TopbarActions />
       </div>
-    </header>
+      </header>
+      {/* thin gold brand hairline under the header */}
+      <div className="gold-rule pointer-events-none sticky top-14 z-20 opacity-70" aria-hidden />
       <ShortcutsDialog open={shortcutsOpen} onOpenChange={setShortcutsOpen} />
     </>
   )

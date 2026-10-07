@@ -391,7 +391,7 @@ export function AccountsSummaryView() {
               value={formatNumber(data.totals.net)}
               valuePrefix={currency}
               icon={Wallet}
-              tone={data.totals.net >= 0 ? 'blue' : 'red'}
+              tone={data.totals.net >= 0 ? 'gold' : 'red'}
               sublabel="Income − Expense"
             />
           </div>

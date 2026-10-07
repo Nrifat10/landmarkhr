@@ -7,7 +7,7 @@ const DEFAULT_SETTINGS: AppSettings = {
   address: 'P.O. Box 34190, Al Khobar 31952, Kingdom of Saudi Arabia',
   phone: '+966 13 847 2200',
   email: 'info@landmarkintergulf.com',
-  logo: null,
+  logo: '/logo-mark.png', // default brand ML monogram (public/logo-mark.png)
   currency: 'SAR',
   defaultPayType: 'bank_transfer',
   authorizedSignatory: '',

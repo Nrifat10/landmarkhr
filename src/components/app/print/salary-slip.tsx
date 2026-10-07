@@ -9,7 +9,7 @@ import {
   DialogDescription,
   DialogTitle,
 } from '@/components/ui/dialog'
-import { formatDate, formatMoney, initials, monthName, round2 } from '@/lib/format'
+import { formatDate, formatMoney, monthName, round2 } from '@/lib/format'
 import { useAppStore } from '@/lib/store'
 import { PAY_TYPE_LABELS, type AppSettings, type PayrollRow } from '@/lib/types'
 
@@ -159,22 +159,16 @@ function SalarySlipDocument({ payroll, settings }: { payroll: SlipPayroll; setti
 
   return (
     <div className="print-area relative mx-auto w-full min-w-[700px] max-w-[210mm] bg-white p-6 text-neutral-900 shadow-sm sm:min-w-0 [print-color-adjust:exact] [-webkit-print-color-adjust:exact]">
-      {/* HEADER */}
-      <header className="flex flex-col gap-4 border-b-2 border-neutral-800 pb-4 sm:flex-row sm:items-start sm:justify-between">
+      {/* HEADER — brand letterhead: logo mark + navy rule + gold accent */}
+      <header className="flex flex-col gap-4 border-b-2 border-[#0F1F3D] pb-3 sm:flex-row sm:items-start sm:justify-between">
         <div className="flex items-start gap-4">
-          {settings.logo ? (
-            <img
-              src={settings.logo}
-              alt={`${companyName} logo`}
-              className="h-16 w-16 shrink-0 rounded-md object-contain"
-            />
-          ) : (
-            <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-md bg-[#0B1B33] text-lg font-bold text-white">
-              {initials(companyName)}
-            </div>
-          )}
+          <img
+            src={settings.logo ?? '/logo-mark.png'}
+            alt={`${companyName} logo`}
+            className="h-20 w-20 shrink-0 object-contain"
+          />
           <div className="min-w-0">
-            <h2 className="text-xl font-bold uppercase tracking-wide">{companyName}</h2>
+            <h2 className="text-xl font-bold uppercase tracking-wide text-[#0F1F3D]">{companyName}</h2>
             {settings.address ? (
               <p className="mt-1 text-xs leading-relaxed text-neutral-500">{settings.address}</p>
             ) : null}
@@ -185,7 +179,7 @@ function SalarySlipDocument({ payroll, settings }: { payroll: SlipPayroll; setti
           </div>
         </div>
         <div className="flex shrink-0 items-center gap-3 sm:flex-col sm:items-end sm:gap-2">
-          <span className="rounded-md bg-[#0B1B33] px-3 py-1.5 text-xs font-bold tracking-widest text-white">
+          <span className="rounded-md border-l-4 border-[#D4AF37] bg-[#0F1F3D] px-3 py-1.5 text-xs font-bold tracking-widest text-white">
             SALARY PAY SLIP
           </span>
           <span className="text-xs text-neutral-500">Issued: {formatDate(new Date())}</span>
@@ -200,6 +194,8 @@ function SalarySlipDocument({ payroll, settings }: { payroll: SlipPayroll; setti
           )}
         </div>
       </header>
+      {/* gold accent segment under the navy header rule */}
+      <div className="mt-[3px] h-[3px] w-24 bg-[#D4AF37]" aria-hidden />
 
       {/* INFO BLOCK */}
       <section className="mt-4 grid grid-cols-2 gap-x-6 gap-y-2 rounded-lg border border-neutral-200 bg-neutral-50 p-4 sm:grid-cols-3">

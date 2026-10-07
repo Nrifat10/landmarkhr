@@ -7,7 +7,7 @@ export function StatCard({
   title,
   value,
   icon: Icon,
-  tone = 'blue',
+  tone = 'navy',
   onMoreInfo,
   moreInfoLabel = 'More info',
   sublabel,
@@ -16,7 +16,7 @@ export function StatCard({
   title: string
   value: string
   icon: React.ComponentType<{ className?: string }>
-  tone?: 'blue' | 'green' | 'red' | 'amber' | 'violet' | 'teal'
+  tone?: 'navy' | 'gold' | 'green' | 'red' | 'amber' | 'violet' | 'teal'
   onMoreInfo?: () => void
   moreInfoLabel?: string
   sublabel?: string
@@ -25,7 +25,8 @@ export function StatCard({
   valuePrefix?: string
 }) {
   const tones: Record<string, string> = {
-    blue: 'from-blue-600 to-blue-500 text-blue-50',
+    navy: 'bg-gradient-to-br from-[#1E3A66] to-[#0F1F3D] text-white',
+    gold: 'bg-gradient-to-br from-[#E3C55C] to-[#C9A430] text-[#2A2005]',
     green: 'from-emerald-600 to-emerald-500 text-emerald-50',
     red: 'from-rose-600 to-rose-500 text-rose-50',
     amber: 'from-amber-500 to-amber-400 text-amber-50',
@@ -54,7 +55,7 @@ export function StatCard({
         </div>
         <div
           className={cn(
-            'flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br shadow-inner sm:h-11 sm:w-11',
+            'flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br shadow-inner ring-1 ring-black/10 sm:h-11 sm:w-11',
             tones[tone]
           )}
         >

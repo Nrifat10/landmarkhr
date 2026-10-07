@@ -466,8 +466,8 @@ function StatusDonut({
 }) {
   const total = active + completed + inactive
   const segments = [
-    { n: active, color: '#3b82f6' },
-    { n: completed, color: '#10b981' },
+    { n: active, color: '#0F1F3D' },
+    { n: completed, color: '#D4AF37' },
     { n: inactive, color: '#9ca3af' },
   ]
   let acc = 0

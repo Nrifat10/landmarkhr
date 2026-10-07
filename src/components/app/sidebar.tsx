@@ -5,13 +5,11 @@ import Image from 'next/image'
 import { usePathname } from 'next/navigation'
 import {
   ChevronsUpDown,
-  GalleryVerticalEnd,
   HandCoins,
   KeyRound,
   LogOut,
   Users,
   HardHat,
-  Home,
   LayoutDashboard,
   Landmark,
   ScrollText,
@@ -150,30 +148,32 @@ export function AppSidebar({ onLogout }: { onLogout: () => void }) {
 
   return (
     <Sidebar side="left" variant="sidebar" collapsible="icon" className="border-r-0">
-      {/* Brand */}
+      {/* Brand — Landmark Inter Gulf (logo white badge + gold wordmark) */}
       <SidebarHeader>
         <SidebarMenu>
           <SidebarMenuItem>
-            <div className="flex items-center gap-2.5 px-1.5 py-2">
-              <div className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-primary text-primary-foreground shadow-md">
-                {settings.logo ? (
-                  <Image
-                    src={settings.logo}
-                    alt={settings.companyName}
-                    width={36}
-                    height={36}
-                    className="h-full w-full object-cover"
-                    unoptimized
-                  />
-                ) : (
-                  <GalleryVerticalEnd className="h-5 w-5" />
-                )}
+            <div className="flex items-center gap-2.5 px-1.5 py-2 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:px-0">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-white shadow-md ring-1 ring-black/10 transition-all duration-200 group-data-[collapsible=icon]:h-8 group-data-[collapsible=icon]:w-8 group-data-[collapsible=icon]:rounded-lg">
+                <Image
+                  src={settings.logo ?? '/logo-mark.png'}
+                  alt={settings.companyName}
+                  width={40}
+                  height={40}
+                  className="h-full w-full object-contain p-[3px]"
+                  unoptimized
+                />
               </div>
-              <div className="min-w-0">
-                <p className="truncate text-sm font-bold leading-tight">{settings.companyName}</p>
-                <p className="truncate text-[11px] text-muted-foreground">Workforce & Payroll</p>
+              <div className="min-w-0 group-data-[collapsible=icon]:hidden">
+                <p className="truncate text-sm font-bold leading-tight text-white">
+                  {settings.companyName}
+                </p>
+                <p className="truncate text-[10px] font-semibold uppercase tracking-[0.16em] text-gold">
+                  Workforce &amp; Payroll
+                </p>
               </div>
             </div>
+            {/* gold hairline separator under the brand */}
+            <div className="gold-rule mx-2 mt-1 opacity-80 group-data-[collapsible=icon]:hidden" aria-hidden />
           </SidebarMenuItem>
         </SidebarMenu>
       </SidebarHeader>
@@ -222,7 +222,7 @@ export function AppSidebar({ onLogout }: { onLogout: () => void }) {
                                         className={cn(
                                           'cursor-pointer',
                                           view === c.view &&
-                                            'bg-primary text-primary-foreground shadow-sm hover:bg-primary/90'
+                                            'data-[active=true]:bg-sidebar-primary data-[active=true]:font-semibold data-[active=true]:text-sidebar-primary-foreground data-[active=true]:shadow-sm hover:bg-sidebar-primary/90'
                                         )}
                                       >
                                         <button type="button" className="w-full text-left">
@@ -248,7 +248,8 @@ export function AppSidebar({ onLogout }: { onLogout: () => void }) {
                           onClick={() => navigate(item.view)}
                           className={cn(
                             'cursor-pointer',
-                            active && 'bg-primary text-primary-foreground shadow-sm hover:bg-primary/90'
+                            active &&
+                              'data-[active=true]:bg-sidebar-primary data-[active=true]:font-semibold data-[active=true]:text-sidebar-primary-foreground data-[active=true]:shadow-sm hover:bg-sidebar-primary/90'
                           )}
                         >
                           <item.icon />

@@ -7,7 +7,7 @@ import { Dialog, DialogContent,
   DialogDescription, DialogTitle } from '@/components/ui/dialog'
 import { usePageRule } from '@/components/app/print/print-page-rule'
 import { api } from '@/lib/api-client'
-import { formatDateTime, formatMoney, formatNumber, initials, monthName } from '@/lib/format'
+import { formatDateTime, formatMoney, formatNumber, monthName } from '@/lib/format'
 import { useAppStore } from '@/lib/store'
 import type {
   CategoryBreakdown,
@@ -198,25 +198,19 @@ export function SalarySheetPrintDialog({
         {/* Scrollable preview of the sheet */}
         <div className="nice-scrollbar flex-1 overflow-auto bg-neutral-100 p-3 sm:p-6 print:overflow-visible print:bg-white print:p-0">
           <div className="print-area print-landscape min-w-[1000px] bg-white p-6 text-neutral-900 shadow-sm print:min-w-0">
-            {/* Company header + total block */}
-            <div className="flex items-start justify-between gap-6 border-b-2 border-neutral-800 pb-4">
+            {/* Company header + total block — brand letterhead (navy rule + gold accent) */}
+            <div className="flex items-start justify-between gap-6 border-b-2 border-[#0F1F3D] pb-4">
               <div className="flex items-center gap-3">
-                {settings.logo ? (
-                  <img
-                    src={settings.logo}
-                    alt={`${settings.companyName} logo`}
-                    className="h-14 w-14 rounded object-contain"
-                  />
-                ) : (
-                  <div className="flex h-14 w-14 items-center justify-center rounded bg-neutral-900 text-lg font-bold text-white">
-                    {initials(settings.companyName)}
-                  </div>
-                )}
+                <img
+                  src={settings.logo ?? '/logo-mark.png'}
+                  alt={`${settings.companyName} logo`}
+                  className="h-16 w-16 rounded object-contain"
+                />
                 <div>
-                  <h1 className="text-xl font-bold uppercase tracking-wide">
+                  <h1 className="text-xl font-bold uppercase tracking-wide text-[#0F1F3D]">
                     {settings.companyName}
                   </h1>
-                  <p className="text-xs text-neutral-500">Monthly Payroll Sheet</p>
+                  <p className="text-xs font-semibold uppercase tracking-[0.14em] text-[#B8942C]">Monthly Payroll Sheet</p>
                   {settings.address ? (
                     <p className="text-[10px] text-neutral-500">{settings.address}</p>
                   ) : null}
@@ -235,6 +229,8 @@ export function SalarySheetPrintDialog({
                 </p>
               </div>
             </div>
+            {/* gold accent segment under the navy header rule */}
+            <div className="mt-[3px] h-[3px] w-28 bg-[#D4AF37]" aria-hidden />
 
             {/* Title + meta */}
             <div className="mt-5 flex flex-wrap items-end justify-between gap-2">

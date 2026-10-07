@@ -41,6 +41,11 @@
   --color-navy-foreground: var(--navy-foreground);
   --color-navy-muted: var(--navy-muted);
   --color-navy-border: var(--navy-border);
+  /* Brand gold tokens (Landmark Inter Gulf logo accent) */
+  --color-gold: var(--gold);
+  --color-gold-foreground: var(--gold-foreground);
+  --color-gold-deep: var(--gold-deep);
+  --color-gold-soft: var(--gold-soft);
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
@@ -49,83 +54,95 @@
 
 :root {
   --radius: 0.625rem;
-  --background: oklch(0.977 0.004 247);
-  --foreground: oklch(0.216 0.02 255);
+  /* ---- Landmark Inter Gulf brand: cream paper + deep navy + metallic gold ---- */
+  --background: oklch(0.966 0.005 106.5); /* #F4F4F0 cream */
+  --foreground: oklch(0.252 0.058 262); /* deep navy ink */
   --card: oklch(1 0 0);
-  --card-foreground: oklch(0.216 0.02 255);
+  --card-foreground: oklch(0.252 0.058 262);
   --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.216 0.02 255);
-  --primary: oklch(0.546 0.19 258.5);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.955 0.008 250);
-  --secondary-foreground: oklch(0.3 0.03 258);
-  --muted: oklch(0.955 0.008 250);
-  /* 0.47 ≈ slate-600 — comfortably WCAG AA on white (VLM QA: subtitles read low-contrast at 0.52) */
-  --muted-foreground: oklch(0.47 0.02 255);
-  --accent: oklch(0.94 0.03 250);
-  --accent-foreground: oklch(0.35 0.08 258);
+  --popover-foreground: oklch(0.252 0.058 262);
+  --primary: oklch(0.244 0.061 261.8); /* #0F1F3D brand navy */
+  --primary-foreground: oklch(0.97 0.008 95); /* warm white */
+  --secondary: oklch(0.938 0.012 95); /* warm grey */
+  --secondary-foreground: oklch(0.3 0.06 262);
+  --muted: oklch(0.94 0.008 95);
+  /* navy-grey #5A6478 — comfortably WCAG AA on white/cream */
+  --muted-foreground: oklch(0.502 0.034 264.2);
+  --accent: oklch(0.947 0.029 89.6); /* soft gold wash */
+  --accent-foreground: oklch(0.42 0.08 88);
   --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.91 0.012 250);
-  --input: oklch(0.91 0.012 250);
-  --ring: oklch(0.546 0.19 258.5);
-  --chart-1: oklch(0.546 0.19 258.5);
-  --chart-2: oklch(0.62 0.17 155);
-  --chart-3: oklch(0.72 0.16 70);
-  --chart-4: oklch(0.55 0.2 20);
-  --chart-5: oklch(0.66 0.15 300);
-  /* Sidebar is DARK NAVY in both light & dark modes (spec) */
-  --sidebar: oklch(0.225 0.055 262);
-  --sidebar-foreground: oklch(0.93 0.01 250);
-  --sidebar-primary: oklch(0.62 0.17 258.5);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.3 0.055 262);
-  --sidebar-accent-foreground: oklch(0.95 0.005 250);
-  --sidebar-border: oklch(0.32 0.05 262);
-  --sidebar-ring: oklch(0.62 0.17 258.5);
+  --border: oklch(0.906 0.014 93); /* warm #E3E0D6 */
+  --input: oklch(0.906 0.014 93);
+  --ring: oklch(0.682 0.124 88.8); /* deep gold #B8942C */
+  --chart-1: oklch(0.244 0.061 261.8); /* navy */
+  --chart-2: oklch(0.767 0.139 91.1); /* gold #D4AF37 */
+  --chart-3: oklch(0.55 0.12 160); /* sage */
+  --chart-4: oklch(0.62 0.15 40); /* terracotta */
+  --chart-5: oklch(0.55 0.04 260); /* slate navy */
+  /* Sidebar is BRAND NAVY in light mode (logo identity) */
+  --sidebar: oklch(0.244 0.061 261.8);
+  --sidebar-foreground: oklch(0.87 0.02 95);
+  --sidebar-primary: oklch(0.767 0.139 91.1); /* gold active */
+  --sidebar-primary-foreground: oklch(0.244 0.061 261.8);
+  --sidebar-accent: oklch(0.305 0.07 261.3); /* #1A2E52 hover */
+  --sidebar-accent-foreground: oklch(0.95 0.015 95);
+  --sidebar-border: oklch(0.33 0.06 262);
+  --sidebar-ring: oklch(0.767 0.139 91.1);
   /* Dark navy sidebar (constant across light/dark modes) */
-  --navy: oklch(0.21 0.055 262);
+  --navy: oklch(0.244 0.061 261.8);
   --navy-foreground: oklch(0.92 0.01 250);
   --navy-muted: oklch(0.6 0.03 255);
-  --navy-border: oklch(0.3 0.05 262);
+  --navy-border: oklch(0.33 0.06 262);
+  /* Gold brand tokens */
+  --gold: oklch(0.767 0.139 91.1); /* #D4AF37 */
+  --gold-foreground: oklch(0.244 0.061 261.8); /* navy on gold */
+  --gold-deep: oklch(0.682 0.124 88.8); /* #B8942C */
+  --gold-soft: oklch(0.947 0.029 89.6); /* #F5EDD8 wash */
 }
 
 .dark {
-  --background: oklch(0.16 0.02 255);
-  --foreground: oklch(0.95 0.005 250);
-  --card: oklch(0.205 0.025 256);
-  --card-foreground: oklch(0.95 0.005 250);
-  --popover: oklch(0.205 0.025 256);
-  --popover-foreground: oklch(0.95 0.005 250);
-  --primary: oklch(0.62 0.17 258.5);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.26 0.03 255);
-  --secondary-foreground: oklch(0.95 0.005 250);
-  --muted: oklch(0.26 0.03 255);
-  --muted-foreground: oklch(0.68 0.02 252);
-  --accent: oklch(0.29 0.05 256);
-  --accent-foreground: oklch(0.95 0.005 250);
+  /* ---- Dark mode: deep navy night + GOLD primary (signature) ---- */
+  --background: oklch(0.187 0.043 266); /* #0A1226 */
+  --foreground: oklch(0.925 0.014 93); /* warm white #E9E6DC */
+  --card: oklch(0.221 0.046 264.5); /* #101A30 */
+  --card-foreground: oklch(0.925 0.014 93);
+  --popover: oklch(0.221 0.046 264.5);
+  --popover-foreground: oklch(0.925 0.014 93);
+  --primary: oklch(0.767 0.139 91.1); /* gold */
+  --primary-foreground: oklch(0.16 0.04 264);
+  --secondary: oklch(0.27 0.05 263);
+  --secondary-foreground: oklch(0.925 0.014 93);
+  --muted: oklch(0.26 0.045 264);
+  --muted-foreground: oklch(0.7 0.028 92);
+  --accent: oklch(0.3 0.055 263);
+  --accent-foreground: oklch(0.925 0.014 93);
   --destructive: oklch(0.66 0.19 25);
   --border: oklch(1 0 0 / 12%);
   --input: oklch(1 0 0 / 16%);
-  --ring: oklch(0.62 0.17 258.5);
-  --chart-1: oklch(0.62 0.17 258.5);
-  --chart-2: oklch(0.68 0.16 155);
-  --chart-3: oklch(0.76 0.16 75);
-  --chart-4: oklch(0.65 0.2 20);
-  --chart-5: oklch(0.7 0.15 300);
-  /* Sidebar stays dark navy in dark mode too */
-  --sidebar: oklch(0.19 0.055 262);
-  --sidebar-foreground: oklch(0.93 0.01 250);
-  --sidebar-primary: oklch(0.62 0.17 258.5);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.27 0.055 262);
-  --sidebar-accent-foreground: oklch(0.95 0.005 250);
-  --sidebar-border: oklch(0.29 0.05 262);
-  --sidebar-ring: oklch(0.62 0.17 258.5);
+  --ring: oklch(0.767 0.139 91.1); /* gold */
+  --chart-1: oklch(0.767 0.139 91.1); /* gold */
+  --chart-2: oklch(0.65 0.09 255);
+  --chart-3: oklch(0.68 0.12 160);
+  --chart-4: oklch(0.7 0.14 45);
+  --chart-5: oklch(0.62 0.04 92);
+  /* Sidebar stays deep navy in dark mode */
+  --sidebar: oklch(0.2 0.05 262);
+  --sidebar-foreground: oklch(0.87 0.02 95);
+  --sidebar-primary: oklch(0.767 0.139 91.1);
+  --sidebar-primary-foreground: oklch(0.16 0.04 264);
+  --sidebar-accent: oklch(0.28 0.055 262);
+  --sidebar-accent-foreground: oklch(0.95 0.015 95);
+  --sidebar-border: oklch(0.3 0.05 262);
+  --sidebar-ring: oklch(0.767 0.139 91.1);
   --navy: oklch(0.185 0.05 262);
   --navy-foreground: oklch(0.92 0.01 250);
   --navy-muted: oklch(0.58 0.03 255);
   --navy-border: oklch(0.28 0.05 262);
+  /* Gold tokens adapt for dark surfaces */
+  --gold: oklch(0.767 0.139 91.1);
+  --gold-foreground: oklch(0.16 0.04 264);
+  --gold-deep: oklch(0.82 0.135 92); /* brighter gold for text on dark */
+  --gold-soft: oklch(0.3 0.05 88);
 }
 
 @layer base {
@@ -137,7 +154,7 @@
   }
 }
 
-/* ---------- Custom scrollbar for long lists ---------- */
+/* ---------- Custom scrollbar for long lists (warm tone) ---------- */
 .nice-scrollbar::-webkit-scrollbar {
   width: 8px;
   height: 8px;
@@ -146,11 +163,34 @@
   background: transparent;
 }
 .nice-scrollbar::-webkit-scrollbar-thumb {
-  background: oklch(0.75 0.02 250 / 45%);
+  background: oklch(0.75 0.045 92 / 45%);
   border-radius: 999px;
 }
 .nice-scrollbar::-webkit-scrollbar-thumb:hover {
-  background: oklch(0.65 0.04 252 / 65%);
+  background: oklch(0.68 0.09 90 / 65%);
+}
+
+/* ---------- Brand flourishes (Landmark Inter Gulf) ---------- */
+::selection {
+  background-color: color-mix(in oklab, var(--gold) 32%, transparent);
+}
+/* Thin gold hairline used under the sidebar brand block & topbar */
+.gold-rule {
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    color-mix(in oklab, var(--gold) 75%, transparent) 30%,
+    color-mix(in oklab, var(--gold) 75%, transparent) 70%,
+    transparent
+  );
+}
+/* Gold gradient display text (brand moments) */
+.text-gold-gradient {
+  background: linear-gradient(100deg, var(--gold-deep), var(--gold) 45%, var(--gold-deep));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
 }
 
 /* ---------- Horizontal scroll affordance fades (see ScrollX component) ---------- */

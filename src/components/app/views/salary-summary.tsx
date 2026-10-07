@@ -224,7 +224,7 @@ export function SalarySummaryView() {
               title="Total Manpower"
               value={String(cards.totalManpower)}
               icon={Users}
-              tone="blue"
+              tone="navy"
               sublabel="Staff paid this period"
             />
             <StatCard

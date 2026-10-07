@@ -21,7 +21,7 @@ function buildSettings(map: Record<string, string>) {
     address: map.address ?? 'P.O. Box 34190, Al Khobar 31952, Kingdom of Saudi Arabia',
     phone: map.phone ?? '+966 13 847 2200',
     email: map.email ?? 'info@landmarkintergulf.com',
-    logo: map.logo ?? null,
+    logo: map.logo ?? '/logo-mark.png', // default brand ML monogram
     currency: map.currency ?? 'SAR',
     defaultPayType: (map.defaultPayType ?? 'bank_transfer') as PayType,
     authorizedSignatory: map.authorizedSignatory ?? '',
