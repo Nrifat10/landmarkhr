@@ -28,6 +28,8 @@ export type ProjectRow = {
   status: ProjectStatus
   clientId: string | null
   clientName: string | null
+  /** Rate billed to the client company per worker-hour (0 = not set; billing falls back to the worker rate) */
+  clientRatePerHour: number
   createdAt: string
   staffCount: number
   /** Total linked income transactions (0 when none) */
@@ -158,37 +160,74 @@ export type StaffCategory = {
   staffCount?: number
 }
 
-/** Worker entry inside a client salary group (deduped per client) */
-export type ClientSalaryWorker = {
-  id: string
+/** One worker × project billing line inside a client group (month-scoped) */
+export type ClientBillingLine = {
+  projectId: string
+  projectName: string
+  staffId: string
   fullName: string
-  position: string | null
   iqamaId: string
+  position: string | null
   categoryName: string | null
-  projectNames: string[]
-  ratePerHour: number
+  /** Attendance hours in the selected month (durationMinutes ÷ 60) */
+  hours: number
+  /** Rate billed to the client company for these hours */
+  clientRate: number
+  /** 'project' = negotiated project rate · 'worker' = fell back to the worker's own rate */
+  rateSource: 'project' | 'worker'
+  /** hours × clientRate (excl VAT) */
+  amount: number
+  /** Worker's own hourly rate — the payroll salary rate */
+  workerRate: number
+  /** hours × workerRate — payroll cost of the same hours */
+  workerCost: number
   monthlySalary: number
   status: StaffStatus
 }
 
-/** One client company's original-salary roll-up (GET /api/clients/salary-summary) */
+/** One client company's billing roll-up (GET /api/clients/salary-summary?month&year) */
 export type ClientSalaryGroup = {
   clientId: string | null
   clientName: string
   city: string | null
   contactPerson: string | null
   phone: string | null
+  email: string | null
+  crNumber: string | null
+  address: string | null
   clientStatus: ClientStatus
   projectCount: number
-  workers: ClientSalaryWorker[]
+  /** Distinct workers deployed at this client */
   workerCount: number
+  /** Workers with attendance hours in the selected month */
+  workersWithHours: number
+  /** Billing lines (worker × project) for the selected month */
+  rows: ClientBillingLine[]
+  /** Σ attendance hours of the group's rows */
+  hours: number
+  /** Σ hours × client rate (excl VAT) */
+  billedAmount: number
+  /** 15% VAT on billedAmount */
+  vatAmount: number
+  /** billedAmount + vatAmount */
+  grandTotal: number
+  /** Σ hours × worker rate — payroll cost of the same hours */
+  workerCost: number
+  /** billedAmount − workerCost (excl VAT) */
+  margin: number
+  /** Σ monthlySalary of the group's distinct workers (original salary context) */
   totalMonthlySalary: number
   avgMonthlySalary: number
-  /** Share of the sum of all group totals (workers on 2 clients count in both) */
+  /** Share of the sum of all group grand totals */
   share: number
 }
 
 export type ClientSalarySummaryData = {
+  /** Billing month the numbers were computed for */
+  month: number
+  year: number
+  /** VAT rate applied (0.15 = Saudi standard 15%) */
+  vatRate: number
   cards: {
     totalClients: number
     /** Distinct deployed workers (a worker on 2 clients counts once) */
@@ -201,6 +240,13 @@ export type ClientSalarySummaryData = {
     benchSalary: number
     /** Workers deployed under 2+ different clients */
     multiClientWorkers: number
+    /** Billing month aggregates over all client groups */
+    billedHours: number
+    billedAmount: number
+    vatAmount: number
+    grandTotal: number
+    workerCost: number
+    margin: number
   }
   groups: ClientSalaryGroup[]
 }

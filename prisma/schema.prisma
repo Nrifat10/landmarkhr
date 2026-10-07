@@ -77,6 +77,9 @@ model Project {
   status      String        @default("active") // active | inactive | completed
   clientId    String?
   client      Client?       @relation(fields: [clientId], references: [id], onDelete: SetNull)
+  // Rate billed to the CLIENT company for each deployed worker-hour (manpower supply price).
+  // Distinct from Staff.ratePerHour, which is the salary paid to the worker (payroll cost).
+  clientRatePerHour Float   @default(0)
   createdAt   DateTime      @default(now())
   updatedAt   DateTime      @updatedAt
 

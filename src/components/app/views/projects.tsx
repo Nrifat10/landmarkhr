@@ -69,7 +69,7 @@ import { CategoryChip, StatusBadge } from '@/components/app/shared/status-badge'
 import { useDebounce } from '@/hooks/use-debounce'
 import { useViewIntent, useViewRecordIntent } from '@/hooks/use-view-intent'
 import { api, qs } from '@/lib/api-client'
-import { formatDate, formatDateTime, formatMoney } from '@/lib/format'
+import { formatDate, formatDateTime, formatMoney, formatNumber } from '@/lib/format'
 import { can, useAppStore } from '@/lib/store'
 import type {
   ClientRow,
@@ -87,9 +87,10 @@ type ProjectForm = {
   location: string
   status: ProjectStatus
   clientId: string
+  clientRatePerHour: string
 }
 
-const EMPTY_FORM: ProjectForm = { name: '', managerName: '', location: '', status: 'active', clientId: '' }
+const EMPTY_FORM: ProjectForm = { name: '', managerName: '', location: '', status: 'active', clientId: '', clientRatePerHour: '' }
 
 const STATUS_OPTIONS = [
   { value: 'active', label: 'Active' },
@@ -634,6 +635,8 @@ export function ProjectsView() {
       location: row.location ?? '',
       status: row.status,
       clientId: row.clientId ?? '',
+      clientRatePerHour:
+        row.clientRatePerHour && row.clientRatePerHour > 0 ? String(row.clientRatePerHour) : '',
     })
     setErrors({})
     setFormOpen(true)
@@ -655,6 +658,7 @@ export function ProjectsView() {
         location: form.location.trim(),
         status: form.status,
         clientId: form.clientId || null,
+        clientRatePerHour: form.clientRatePerHour.trim() === '' ? 0 : Number(form.clientRatePerHour),
       }
       if (editing) {
         await api.put<ProjectRow>(`/api/projects/${editing.id}`, body)
@@ -878,10 +882,19 @@ export function ProjectsView() {
                   </TableCell>
                   <TableCell>
                     {row.clientName ? (
-                      <span className="flex items-center gap-1.5">
-                        <Building2 className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-                        <span className="max-w-[160px] truncate">{row.clientName}</span>
-                      </span>
+                      <div className="flex flex-col gap-0.5">
+                        <span className="flex items-center gap-1.5">
+                          <Building2 className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                          <span className="max-w-[160px] truncate">{row.clientName}</span>
+                        </span>
+                        {row.clientRatePerHour > 0 ? (
+                          <span className="text-[11px] font-medium tabular-nums text-emerald-700 dark:text-emerald-400">
+                            {formatNumber(row.clientRatePerHour)} {currency}/hour billed
+                          </span>
+                        ) : (
+                          <span className="text-[11px] text-muted-foreground">rate not set</span>
+                        )}
+                      </div>
                     ) : (
                       <span className="text-muted-foreground">—</span>
                     )}
@@ -1062,6 +1075,25 @@ export function ProjectsView() {
               </p>
             </div>
             <div className="space-y-2">
+              <Label htmlFor="project-client-rate">Client Rate / Hour ({currency})</Label>
+              <Input
+                id="project-client-rate"
+                type="number"
+                inputMode="decimal"
+                min={0}
+                step="0.25"
+                value={form.clientRatePerHour}
+                onChange={(e) => setForm((f) => ({ ...f, clientRatePerHour: e.target.value }))}
+                placeholder="e.g. 20"
+                aria-describedby="project-client-rate-hint"
+              />
+              <p id="project-client-rate-hint" className="text-xs text-muted-foreground">
+                The manpower supply price charged to the client company (e.g. 20 {currency}/hour).
+                Worker salaries use each worker&apos;s own rate — this rate is only used for client
+                billing in the Client Salary Summary.
+              </p>
+            </div>
+            <div className="space-y-2">
               <Label htmlFor="project-status">Status</Label>
               <Select
                 value={form.status}
@@ -1115,7 +1147,18 @@ export function ProjectsView() {
                   </span>
                 </DetailItem>
                 <DetailItem icon={Building2} label="Client Company">
-                  {project.clientName ?? '—'}
+                  <span className="flex flex-col">
+                    <span>{project.clientName ?? '—'}</span>
+                    {project.clientRatePerHour > 0 ? (
+                      <span className="text-xs font-medium tabular-nums text-emerald-700 dark:text-emerald-400">
+                        {formatNumber(project.clientRatePerHour)} {currency}/hour billed to client
+                      </span>
+                    ) : project.clientName ? (
+                      <span className="text-xs text-muted-foreground">
+                        client rate not set — billing falls back to worker rates
+                      </span>
+                    ) : null}
+                  </span>
                 </DetailItem>
                 <DetailItem icon={MapPin} label="Location">
                   {project.location ?? '—'}

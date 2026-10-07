@@ -41,6 +41,13 @@ const projectSchema = z.object({
     (v) => (v === '' || v === null || v === undefined ? null : v),
     z.string().nullable()
   ),
+  clientRatePerHour: z.preprocess(
+    (v) => (v === '' || v === null || v === undefined ? 0 : Number(v)),
+    z
+      .number({ error: 'Client rate must be a number' })
+      .min(0, 'Client rate cannot be negative')
+      .max(100000, 'Client rate is out of range')
+  ).default(0),
 })
 
 type ProjectWithCount = Prisma.ProjectGetPayload<{
@@ -94,6 +101,7 @@ function toProjectRow(
     status: p.status as ProjectStatus,
     clientId: p.client?.id ?? null,
     clientName: p.client?.name ?? null,
+    clientRatePerHour: p.clientRatePerHour,
     createdAt: p.createdAt.toISOString(),
     staffCount,
     income: Math.round(financials.income * 100) / 100,
@@ -173,7 +181,7 @@ export async function POST(req: NextRequest) {
     if (!parsed.success) {
       return badRequest(parsed.error.issues[0]?.message ?? 'Invalid request data')
     }
-    const { name, managerName, location, clientId } = parsed.data
+    const { name, managerName, location, clientId, clientRatePerHour } = parsed.data
     const status = parsed.data.status ?? 'active'
 
     // Validate the client link when provided
@@ -183,7 +191,7 @@ export async function POST(req: NextRequest) {
     }
 
     const project = await db.project.create({
-      data: { name, managerName, location, status, clientId },
+      data: { name, managerName, location, status, clientId, clientRatePerHour },
       include: {
         _count: { select: { staff: true } },
         client: { select: { id: true, name: true } },
