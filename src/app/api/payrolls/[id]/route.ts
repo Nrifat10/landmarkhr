@@ -63,6 +63,10 @@ const payrollBodySchema = z.object({
   unionFees: z.coerce.number().min(0, 'Union fees cannot be negative').default(0),
   otherDeductionValue: z.coerce.number().min(0, 'Other deduction cannot be negative').default(0),
   otherDeductionType: z.enum(['fixed', 'percent']).default('fixed'),
+  // Client billing rates (optional — preserved as-is when the payroll form
+  // omits them; the Client Salary Summary edits them via its own endpoint)
+  clientRate: z.coerce.number().min(0).max(100000).optional(),
+  clientOtRate: z.coerce.number().min(0).max(100000).optional(),
   status: z.enum(['pending', 'paid']).default('pending'),
   payDate: z.string().nullable().optional(),
   payType: z.enum(['bank_transfer', 'cash', 'cheque']).default('bank_transfer'),
@@ -184,6 +188,9 @@ export async function PUT(req: NextRequest, { params }: Params) {
           unionFees: input.unionFees,
           otherDeductionValue: input.otherDeductionValue,
           otherDeductionType: input.otherDeductionType,
+          // Client billing rates ride along unchanged unless explicitly provided
+          clientRate: input.clientRate ?? existing.clientRate,
+          clientOtRate: input.clientOtRate ?? existing.clientOtRate,
           grossPay: round2(calc.grossPay),
           totalDeductions: round2(calc.totalDeductions),
           netPay: round2(calc.netPay),

@@ -162,6 +162,8 @@ export type StaffCategory = {
 
 /** One worker × project billing line inside a client group (month-scoped) */
 export type ClientBillingLine = {
+  /** Payroll record this line mirrors (hours + manual client rates live there) */
+  payrollId: string
   projectId: string
   projectName: string
   staffId: string
@@ -169,17 +171,27 @@ export type ClientBillingLine = {
   iqamaId: string
   position: string | null
   categoryName: string | null
-  /** Attendance hours in the selected month (durationMinutes ÷ 60) */
+  /** Regular hours — EXACTLY Payroll.totalHours for the same month */
   hours: number
-  /** Rate billed to the client company for these hours */
+  /** Overtime hours — EXACTLY Payroll.overtimeHours for the same month */
+  otHours: number
+  /** Effective rate billed to the client for regular hours */
   clientRate: number
-  /** 'project' = negotiated project rate · 'worker' = fell back to the worker's own rate */
-  rateSource: 'project' | 'worker'
-  /** hours × clientRate (excl VAT) */
+  /** Effective rate billed to the client for OT hours (defaults to clientRate) */
+  clientOtRate: number
+  /** Raw manually-entered rate on the payroll row (0 = inherited from project/worker) */
+  manualRate: number
+  /** Raw manually-entered OT rate on the payroll row (0 = same as regular rate) */
+  manualOtRate: number
+  /** Project's negotiated default client rate (fallback when manual = 0) */
+  projectRate: number
+  /** 'manual' = typed in this summary · 'project' = project default · 'worker' = worker pay-rate fallback */
+  rateSource: 'manual' | 'project' | 'worker'
+  /** (hours × clientRate) + (otHours × clientOtRate) — excl VAT */
   amount: number
-  /** Worker's own hourly rate — the payroll salary rate */
+  /** Worker's own hourly rate — the payroll salary rate (hourlyRateSnapshot) */
   workerRate: number
-  /** hours × workerRate — payroll cost of the same hours */
+  /** hours × workerRate + otHours × worker OT rate — payroll cost of the same hours */
   workerCost: number
   monthlySalary: number
   status: StaffStatus
@@ -197,14 +209,16 @@ export type ClientSalaryGroup = {
   address: string | null
   clientStatus: ClientStatus
   projectCount: number
-  /** Distinct workers deployed at this client */
+  /** Distinct workers billed at this client this month (payroll rows) */
   workerCount: number
-  /** Workers with attendance hours in the selected month */
+  /** Workers with regular or OT hours in the selected month */
   workersWithHours: number
-  /** Billing lines (worker × project) for the selected month */
+  /** Billing lines (worker × project) for the selected month — mirror Payroll rows */
   rows: ClientBillingLine[]
-  /** Σ attendance hours of the group's rows */
+  /** Σ regular hours of the group's rows (Payroll.totalHours) */
   hours: number
+  /** Σ overtime hours of the group's rows (Payroll.overtimeHours) */
+  otHours: number
   /** Σ hours × client rate (excl VAT) */
   billedAmount: number
   /** 15% VAT on billedAmount */
@@ -230,18 +244,19 @@ export type ClientSalarySummaryData = {
   vatRate: number
   cards: {
     totalClients: number
-    /** Distinct deployed workers (a worker on 2 clients counts once) */
+    /** Distinct workers with payroll rows this month (a worker on 2 clients counts once) */
     totalWorkers: number
-    /** Σ monthlySalary of distinct deployed workers */
+    /** Σ monthlySalary of those distinct workers */
     totalMonthlySalary: number
     avgMonthlySalary: number
-    /** Active staff with no project assignment at all */
+    /** Active staff with no project assignment at all (context note) */
     benchWorkers: number
     benchSalary: number
-    /** Workers deployed under 2+ different clients */
+    /** Workers billed under 2+ different clients this month */
     multiClientWorkers: number
     /** Billing month aggregates over all client groups */
     billedHours: number
+    billedOtHours: number
     billedAmount: number
     vatAmount: number
     grandTotal: number
@@ -327,6 +342,8 @@ export type PayrollRow = {
   unionFees: number
   otherDeductionValue: number
   otherDeductionType: DeductionType
+  clientRate: number
+  clientOtRate: number
   grossPay: number
   totalDeductions: number
   netPay: number

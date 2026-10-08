@@ -1,8 +1,9 @@
 'use client'
 
 // Per-client billing statement print preview — one company's monthly manpower
-// summary: every deployed worker with attendance hours, the client rate billed
-// per hour, the line amount, then Subtotal + 15% VAT + Grand Total. Styled
+// summary: every billed worker with their PAYROLL hours for the month (regular +
+// overtime, exactly the same numbers as the salary sheet) and the manually-
+// entered client rate per hour, then Subtotal + 15% VAT + Grand Total. Styled
 // after the company letterhead (navy rule + gold accent), A4 portrait.
 import { Fragment, useMemo } from 'react'
 import { Printer, X } from 'lucide-react'
@@ -75,20 +76,22 @@ export function ClientSummaryPrintDialog({
   const money = (n: number) => formatMoney(n, settings.currency)
   const vatPercent = Math.round(vatRate * 100)
 
-  // Rows grouped by project (each project may carry its own client rate)
+  // Rows grouped by project (rates are entered per worker inside each project)
   const byProject = useMemo(() => {
     if (!group) return []
-    const map = new Map<string, { name: string; rate: number; rows: typeof group.rows }>()
+    const map = new Map<string, { name: string; rows: typeof group.rows }>()
     for (const r of group.rows) {
       let p = map.get(r.projectId)
       if (!p) {
-        p = { name: r.projectName, rate: r.clientRate, rows: [] }
+        p = { name: r.projectName, rows: [] }
         map.set(r.projectId, p)
       }
       p.rows.push(r)
     }
     return Array.from(map.values())
   }, [group])
+
+  const hasOt = (group?.otHours ?? 0) > 0 || (group?.rows.some((r) => r.otHours > 0) ?? false)
 
   if (!group) return null
 
@@ -116,7 +119,8 @@ export function ClientSummaryPrintDialog({
             <h2 className="text-sm font-semibold">{group.clientName} — Billing Statement</h2>
             <p className="text-xs text-muted-foreground">
               {periodLabel} · {group.workerCount} worker{group.workerCount === 1 ? '' : 's'} ·{' '}
-              {fmtHours(group.hours)} hours · A4 portrait
+              {fmtHours(group.hours)} hours
+              {group.otHours > 0 ? ` + ${fmtHours(group.otHours)} OT` : ''} · A4 portrait
             </p>
           </div>
           <div className="flex items-center gap-2">
@@ -202,6 +206,7 @@ export function ClientSummaryPrintDialog({
                 <p>
                   <span className="font-semibold text-neutral-800">Total Hours:</span>{' '}
                   {fmtHours(group.hours)}
+                  {group.otHours > 0 ? ` + ${fmtHours(group.otHours)} OT` : ''}
                 </p>
                 <p className="text-[9px] text-neutral-400">
                   Generated: {formatDateTime(new Date())}
@@ -218,7 +223,9 @@ export function ClientSummaryPrintDialog({
                   <th className={th}>Position</th>
                   <th className={th}>Project</th>
                   <th className={thR}>Hours</th>
+                  <th className={thR}>OT Hrs</th>
                   <th className={thR}>Rate / Hr</th>
+                  <th className={thR}>OT Rate</th>
                   <th className={thR}>Amount ({settings.currency})</th>
                 </tr>
               </thead>
@@ -237,14 +244,11 @@ export function ClientSummaryPrintDialog({
                         <td className={td}>{r.position ?? '—'}</td>
                         <td className={td}>
                           <span className="font-medium">{r.projectName}</span>
-                          {i === 0 ? (
-                            <span className="block text-[9px] text-neutral-500">
-                              Rate: {formatNumber(r.clientRate)} {settings.currency}/hour
-                            </span>
-                          ) : null}
                         </td>
                         <td className={tdR}>{fmtHours(r.hours)}</td>
+                        <td className={tdR}>{r.otHours > 0 ? fmtHours(r.otHours) : '—'}</td>
                         <td className={tdR}>{formatNumber(r.clientRate)}</td>
+                        <td className={tdR}>{r.otHours > 0 ? formatNumber(r.clientOtRate) : '—'}</td>
                         <td className={`${tdR} font-semibold`}>{money(r.amount)}</td>
                       </tr>
                     ))}
@@ -257,6 +261,10 @@ export function ClientSummaryPrintDialog({
                     <span className="font-semibold">SUBTOTAL — {group.workerCount} worker{group.workerCount === 1 ? '' : 's'}</span>
                   </td>
                   <td className={`${tdR} bg-neutral-50 font-semibold`}>{fmtHours(group.hours)}</td>
+                  <td className={`${tdR} bg-neutral-50 font-semibold`}>
+                    {group.otHours > 0 ? fmtHours(group.otHours) : '—'}
+                  </td>
+                  <td className={`${tdR} bg-neutral-50`}></td>
                   <td className={`${tdR} bg-neutral-50`}></td>
                   <td className={`${tdR} bg-neutral-50 font-semibold`}>
                     {money(group.billedAmount)}
@@ -265,14 +273,14 @@ export function ClientSummaryPrintDialog({
                 <tr>
                   <td
                     className={`${td} bg-neutral-50`}
-                    colSpan={6}
+                    colSpan={8}
                   >
                     <span className="font-semibold">VAT ({vatPercent}%)</span>
                   </td>
                   <td className={`${tdR} bg-neutral-50 font-semibold`}>{money(group.vatAmount)}</td>
                 </tr>
                 <tr className="bg-[#0F1F3D] font-bold text-white">
-                  <td className="border border-[#0F1F3D] px-1.5 py-1.5" colSpan={6}>
+                  <td className="border border-[#0F1F3D] px-1.5 py-1.5" colSpan={8}>
                     GRAND TOTAL (incl. {vatPercent}% VAT)
                   </td>
                   <td className="border border-[#0F1F3D] px-1.5 py-1.5 text-right tabular-nums">
@@ -290,9 +298,10 @@ export function ClientSummaryPrintDialog({
 
             {/* Payment note */}
             <p className="mt-2 text-[10px] leading-relaxed text-neutral-500">
-              This statement covers manpower supply services for {periodLabel}: attendance hours ×
-              the agreed client rate per hour for each deployed worker. Worker salaries are
-              disbursed separately by {settings.companyName} under its own payroll.
+              This statement covers manpower supply services for {periodLabel}: each worker&apos;s
+              payroll hours (regular{hasOt ? ' + overtime' : ''}) × the agreed client rate per hour.
+              Hours match the {periodLabel} payroll exactly. Worker salaries are disbursed separately
+              by {settings.companyName} under its own payroll.
             </p>
 
             {/* Signature blocks */}

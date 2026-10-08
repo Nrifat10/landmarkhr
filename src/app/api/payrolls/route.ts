@@ -62,6 +62,10 @@ const payrollBodySchema = z.object({
   unionFees: z.coerce.number().min(0, 'Union fees cannot be negative').default(0),
   otherDeductionValue: z.coerce.number().min(0, 'Other deduction cannot be negative').default(0),
   otherDeductionType: z.enum(['fixed', 'percent']).default('fixed'),
+  // Client billing rates (optional — the Client Salary Summary owns these;
+  // when omitted, POST prefills clientRate from the project's default rate)
+  clientRate: z.coerce.number().min(0).max(100000).optional(),
+  clientOtRate: z.coerce.number().min(0).max(100000).optional(),
   status: z.enum(['pending', 'paid']).default('pending'),
   payDate: z.string().nullable().optional(),
   payType: z.enum(['bank_transfer', 'cash', 'cheque']).default('bank_transfer'),
@@ -156,9 +160,14 @@ export async function POST(req: NextRequest) {
     if (!staff) return badRequest('Staff member not found')
 
     const projectId = input.projectId?.trim() ? input.projectId.trim() : null
+    let projectRate = 0
     if (projectId) {
-      const project = await db.project.findUnique({ where: { id: projectId }, select: { id: true } })
+      const project = await db.project.findUnique({
+        where: { id: projectId },
+        select: { id: true, clientRatePerHour: true },
+      })
       if (!project) return badRequest('Project not found')
+      projectRate = project.clientRatePerHour
     }
 
     // Code-level duplicate check (SQLite treats NULL projectId as distinct in the unique index)
@@ -204,6 +213,9 @@ export async function POST(req: NextRequest) {
           unionFees: input.unionFees,
           otherDeductionValue: input.otherDeductionValue,
           otherDeductionType: input.otherDeductionType,
+          // Client billing snapshot: explicit value wins, else the project default
+          clientRate: input.clientRate ?? projectRate,
+          clientOtRate: input.clientOtRate ?? 0,
           grossPay: round2(calc.grossPay),
           totalDeductions: round2(calc.totalDeductions),
           netPay: round2(calc.netPay),

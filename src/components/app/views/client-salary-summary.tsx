@@ -1,12 +1,16 @@
 'use client'
 
 // Client Salary Summary — monthly MANPOWER BILLING grouped by client company.
-// For the chosen month every deployed worker's attendance hours are billed at
-// the project's client rate (what we charge the client, e.g. 20 SAR/hour —
-// distinct from the worker's own payroll rate, e.g. 15 SAR/hour). Each client
-// group carries hours + rate + line amounts + Subtotal + 15% VAT + Grand Total
-// and can be PRINTED and DOWNLOADED separately as its own company summary.
-import { useCallback, useEffect, useMemo, useState } from 'react'
+// HOURS MIRROR PAYROLL: for the chosen month every payroll record becomes one
+// billing line with EXACTLY the same regular + overtime hours the worker's
+// salary sheet shows (they are read-only here — edit the payroll to change them).
+// The client RATE is entered MANUALLY per worker (the price we charge the
+// client company, e.g. 20 SAR/hour — distinct from the worker's own payroll
+// rate, e.g. 15 SAR/hour). Unset rates fall back to the project's default
+// client rate, then to the worker's own pay rate (⚠ flagged). Each client group
+// carries Subtotal + 15% VAT + Grand Total and can be PRINTED / DOWNLOADED
+// separately as its own company summary.
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   BadgeDollarSign,
   Building2,
@@ -16,11 +20,12 @@ import {
   FileBarChart,
   FolderKanban,
   Info,
+  Loader2,
+  Lock,
   Pencil,
   Printer,
   Users,
   Wallet,
-  X as XIcon,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
@@ -53,7 +58,6 @@ import type {
   ClientBillingLine,
   ClientSalaryGroup,
   ClientSalarySummaryData,
-  ProjectRow,
 } from '@/lib/types'
 
 const STAFF_SCOPE_OPTIONS = [
@@ -93,17 +97,101 @@ function fmtHours(n: number): string {
   return Number.isInteger(n) ? String(n) : formatNumber(n, 2)
 }
 
+// ---------------------------------------------------------------------------
+// Live rate-edit overlay — amounts recompute client-side while typing so the
+// user sees hours × rate instantly; the saved value lands on the payroll row.
+// ---------------------------------------------------------------------------
+
+/** payrollId → in-progress manual rate values (0 = cleared → inherit fallback) */
+type RateEdit = { rate?: number; otRate?: number }
+type RateEdits = Record<string, RateEdit>
+
+function editRate(r: ClientBillingLine, edits: RateEdits): number {
+  return edits[r.payrollId]?.rate !== undefined ? edits[r.payrollId].rate! : r.manualRate
+}
+function editOtRate(r: ClientBillingLine, edits: RateEdits): number {
+  return edits[r.payrollId]?.otRate !== undefined ? edits[r.payrollId].otRate! : r.manualOtRate
+}
+/** manual entry → project default → worker's own pay rate */
+function effectiveRate(r: ClientBillingLine, edits: RateEdits): number {
+  const manual = editRate(r, edits)
+  if (manual > 0) return manual
+  if (r.projectRate > 0) return r.projectRate
+  return r.workerRate
+}
+/** manual OT entry, else the same effective regular rate */
+function effectiveOtRate(r: ClientBillingLine, edits: RateEdits, effRate?: number): number {
+  const manual = editOtRate(r, edits)
+  if (manual > 0) return manual
+  return effRate ?? effectiveRate(r, edits)
+}
+function rateSourceOf(r: ClientBillingLine, edits: RateEdits): ClientBillingLine['rateSource'] {
+  if (editRate(r, edits) > 0) return 'manual'
+  if (r.projectRate > 0) return 'project'
+  return 'worker'
+}
+
+/** Rebuild rows + aggregates with the current in-progress edits applied. */
+function recomputeSummary(data: ClientSalarySummaryData, edits: RateEdits): ClientSalarySummaryData {
+  const groups = data.groups.map((g) => {
+    const rows = g.rows.map((r) => {
+      const rate = effectiveRate(r, edits)
+      const otRate = effectiveOtRate(r, edits, rate)
+      return {
+        ...r,
+        clientRate: rate,
+        clientOtRate: otRate,
+        rateSource: rateSourceOf(r, edits),
+        amount: round2(r.hours * rate + r.otHours * otRate),
+      }
+    })
+    const hours = round2(rows.reduce((s, r) => s + r.hours, 0))
+    const otHours = round2(rows.reduce((s, r) => s + r.otHours, 0))
+    const billedAmount = round2(rows.reduce((s, r) => s + r.amount, 0))
+    const vatAmount = round2(billedAmount * data.vatRate)
+    return {
+      ...g,
+      rows,
+      hours,
+      otHours,
+      billedAmount,
+      vatAmount,
+      grandTotal: round2(billedAmount + vatAmount),
+      margin: round2(billedAmount - g.workerCost),
+      share: 0,
+    }
+  })
+  const denominator = groups.reduce((s, g) => s + g.grandTotal, 0)
+  for (const g of groups) {
+    g.share = denominator > 0 ? round2((100 * g.grandTotal) / denominator) : 0
+  }
+  // Cards stay global — only recompute them from the (filtered) groups when no
+  // search is active, i.e. when the visible groups ARE all groups.
+  const cards = { ...data.cards }
+  if (groups.length === data.groups.length) {
+    cards.billedAmount = round2(groups.reduce((s, g) => s + g.billedAmount, 0))
+    cards.vatAmount = round2(groups.reduce((s, g) => s + g.vatAmount, 0))
+    cards.grandTotal = round2(groups.reduce((s, g) => s + g.grandTotal, 0))
+    cards.margin = round2(groups.reduce((s, g) => s + g.margin, 0))
+  }
+  return { ...data, groups, cards }
+}
+
+// ---------------------------------------------------------------------------
+// Per-project bucket (workers of one project inside a client group)
+// ---------------------------------------------------------------------------
+
 type ProjectBucket = {
   projectId: string
   projectName: string
-  rate: number
-  rateSource: 'project' | 'worker'
+  /** Project's negotiated default client rate (fallback for unset rows) */
+  projectRate: number
   rows: ClientBillingLine[]
   hours: number
+  otHours: number
   subtotal: number
 }
 
-/** Group a client's billing lines by project (each project has one client rate) */
 function bucketByProject(rows: ClientBillingLine[]): ProjectBucket[] {
   const map = new Map<string, ProjectBucket>()
   for (const r of rows) {
@@ -112,146 +200,274 @@ function bucketByProject(rows: ClientBillingLine[]): ProjectBucket[] {
       b = {
         projectId: r.projectId,
         projectName: r.projectName,
-        rate: r.clientRate,
-        rateSource: r.rateSource,
+        projectRate: r.projectRate,
         rows: [],
         hours: 0,
+        otHours: 0,
         subtotal: 0,
       }
       map.set(r.projectId, b)
     }
     b.rows.push(r)
     b.hours = round2(b.hours + r.hours)
+    b.otHours = round2(b.otHours + r.otHours)
     b.subtotal = round2(b.subtotal + r.amount)
   }
-  return Array.from(map.values()).sort((a, b) => b.subtotal - a.subtotal || a.projectName.localeCompare(b.projectName))
+  return Array.from(map.values()).sort(
+    (a, b) => b.subtotal - a.subtotal || a.projectName.localeCompare(b.projectName)
+  )
 }
 
-/** Inline editor for a project's client rate (PUT /api/projects/:id). */
-function ProjectRateEditor({
-  projectId,
-  rate,
-  currency,
-  onSaved,
-}: {
-  projectId: string
-  rate: number
-  currency: string
-  onSaved: () => void
-}) {
-  const [editing, setEditing] = useState(false)
-  const [value, setValue] = useState(rate > 0 ? String(rate) : '')
-  const [saving, setSaving] = useState(false)
+// ---------------------------------------------------------------------------
+// RateCell — an always-editable rate input. Live-updates the amount while
+// typing; commits on Enter/blur via PUT /api/payrolls/[id]/client-rate.
+// ---------------------------------------------------------------------------
 
-  async function save() {
-    if (saving) return // guard against double submits (Enter + button click)
-    const n = value.trim() === '' ? 0 : Number(value)
-    if (!Number.isFinite(n) || n < 0 || n > 100000) {
-      toast.error('Enter a valid client rate (0 or more)')
+function RateCell({
+  value,
+  manual,
+  currency,
+  canEdit,
+  onChange,
+  onCommit,
+  ariaLabel,
+  compact,
+}: {
+  /** Effective (fallback-resolved) rate — what the input shows */
+  value: number
+  /** Raw manually-saved rate on the payroll row (0 = inherited) */
+  manual: number
+  currency: string
+  canEdit: boolean
+  /** live, while typing — 0 = cleared */
+  onChange: (v: number) => void
+  /** persist — resolve with the new raw manual value */
+  onCommit: (v: number) => Promise<void>
+  ariaLabel: string
+  compact?: boolean
+}) {
+  const [txt, setTxt] = useState(value > 0 ? String(value) : '')
+  const [state, setState] = useState<'idle' | 'saving' | 'saved'>('idle')
+  const [editing, setEditing] = useState(false)
+  const [dirty, setDirty] = useState(false)
+  const timer = useRef<number | null>(null)
+
+  // Sync from the parent (bulk apply / reload) while NOT editing — the
+  // documented "adjust state when a prop changes" render pattern (no effect).
+  const [prevValue, setPrevValue] = useState(value)
+  if (prevValue !== value && !editing) {
+    setPrevValue(value)
+    setTxt(value > 0 ? String(value) : '')
+  }
+
+  useEffect(
+    () => () => {
+      if (timer.current) window.clearTimeout(timer.current)
+    },
+    []
+  )
+
+  async function commit() {
+    const v = txt.trim() === '' ? 0 : Number(txt)
+    if (!Number.isFinite(v) || v < 0 || v > 100000) {
+      toast.error('Enter a valid rate (0 – 100,000)')
+      setTxt(value > 0 ? String(value) : '')
+      setDirty(false)
       return
     }
-    setSaving(true)
+    if (!dirty) return // untouched — focus + blur must not save a phantom rate
+    onChange(v)
+    if (v === manual) {
+      setDirty(false)
+      return // unchanged — nothing to persist
+    }
+    setState('saving')
     try {
-      // PUT needs the full project payload — fetch it, then merge the new rate
-      const project = await api.get<ProjectRow>(`/api/projects/${projectId}`)
-      await api.put(`/api/projects/${projectId}`, {
-        name: project.name,
-        managerName: project.managerName,
-        location: project.location ?? '',
-        status: project.status,
-        clientId: project.clientId ?? '',
-        clientRatePerHour: n,
-      })
-      toast.success(
-        n > 0 ? `Client rate set to ${formatNumber(n)} ${currency}/hour` : 'Client rate cleared'
-      )
-      setEditing(false)
-      onSaved()
+      await onCommit(v)
+      setDirty(false)
+      setState('saved')
+      if (timer.current) window.clearTimeout(timer.current)
+      timer.current = window.setTimeout(() => setState('idle'), 1400)
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Could not update the client rate')
-    } finally {
-      setSaving(false)
+      toast.error(e instanceof Error ? e.message : 'Could not save the rate')
+      setState('idle')
+      setTxt(value > 0 ? String(value) : '')
+      setDirty(false)
+      onChange(manual)
     }
   }
 
-  if (editing) {
+  if (!canEdit) {
     return (
-      <span
-        className="inline-flex items-center gap-0.5"
-        onClick={(e) => e.stopPropagation()}
-        onKeyDown={(e) => e.stopPropagation()}
-      >
-        <Input
-          autoFocus
-          type="number"
-          inputMode="decimal"
-          min={0}
-          step="0.25"
-          value={value}
-          onChange={(e) => setValue(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter') {
-              e.preventDefault()
-              void save()
-            } else if (e.key === 'Escape') {
-              setEditing(false)
-              setValue(rate > 0 ? String(rate) : '')
-            }
-          }}
-          className="h-7 w-24 px-2 py-0 text-right text-xs tabular-nums"
-          aria-label="Client rate per hour"
-          disabled={saving}
-        />
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon"
-          className="h-7 w-7"
-          onClick={() => void save()}
-          disabled={saving}
-          aria-label="Save client rate"
-        >
-          <Check className="h-3.5 w-3.5 text-emerald-600" />
-        </Button>
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon"
-          className="h-7 w-7"
-          onClick={() => {
-            setEditing(false)
-            setValue(rate > 0 ? String(rate) : '')
-          }}
-          disabled={saving}
-          aria-label="Cancel editing"
-        >
-          <XIcon className="h-3.5 w-3.5 text-muted-foreground" />
-        </Button>
+      <span className="tabular-nums" title={`${formatNumber(value)} ${currency} per hour`}>
+        {formatNumber(value)}
       </span>
     )
   }
 
   return (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <button
-          type="button"
-          onClick={(e) => {
-            e.stopPropagation()
-            setValue(rate > 0 ? String(rate) : '')
-            setEditing(true)
-          }}
-          className="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-xs font-semibold tabular-nums transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-          aria-label={`Edit client rate (currently ${formatNumber(rate)} ${currency} per hour)`}
-        >
-          {formatNumber(rate)} {currency}/h
-          <Pencil className="h-3 w-3 text-muted-foreground" aria-hidden />
-        </button>
-      </TooltipTrigger>
-      <TooltipContent>Edit the client rate billed for this project</TooltipContent>
-    </Tooltip>
+    <span className="inline-flex items-center gap-1">
+      <Input
+        type="number"
+        inputMode="decimal"
+        min={0}
+        step="0.25"
+        value={txt}
+        placeholder="auto"
+        aria-label={ariaLabel}
+        onChange={(e) => {
+          setTxt(e.target.value)
+          setDirty(true)
+          const v = e.target.value.trim() === '' ? 0 : Number(e.target.value)
+          onChange(Number.isFinite(v) && v >= 0 ? v : 0)
+        }}
+        onFocus={() => setEditing(true)}
+        onBlur={() => {
+          setEditing(false)
+          void commit()
+        }}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') {
+            e.preventDefault()
+            ;(e.target as HTMLInputElement).blur()
+          } else if (e.key === 'Escape') {
+            setTxt(value > 0 ? String(value) : '')
+            setDirty(false)
+            onChange(manual)
+            ;(e.target as HTMLInputElement).blur()
+          }
+        }}
+        className={cn(
+          'h-7 px-2 py-0 text-right tabular-nums',
+          compact ? 'w-[68px] text-xs' : 'w-20 text-xs'
+        )}
+      />
+      {state === 'saving' ? (
+        <Loader2 className="h-3 w-3 shrink-0 animate-spin text-muted-foreground" aria-hidden />
+      ) : state === 'saved' ? (
+        <Check className="h-3.5 w-3.5 shrink-0 text-emerald-600" aria-label="Rate saved" />
+      ) : null}
+    </span>
   )
 }
+
+// ---------------------------------------------------------------------------
+// BulkRateApply — set one rate for EVERY worker of a project (this month).
+// ---------------------------------------------------------------------------
+
+function BulkRateApply({
+  projectId,
+  month,
+  year,
+  workerCount,
+  currency,
+  onApplied,
+}: {
+  projectId: string
+  month: number
+  year: number
+  workerCount: number
+  currency: string
+  onApplied: (clientRate: number, clientOtRate: number | null) => void
+}) {
+  const [rate, setRate] = useState('')
+  const [otRate, setOtRate] = useState('')
+  const [busy, setBusy] = useState(false)
+
+  async function apply() {
+    const n = rate.trim() === '' ? 0 : Number(rate)
+    if (!Number.isFinite(n) || n <= 0 || n > 100000) {
+      toast.error(`Enter the client rate to apply (1 – 100,000 ${currency})`)
+      return
+    }
+    const ot = otRate.trim() === '' ? null : Number(otRate)
+    if (ot !== null && (!Number.isFinite(ot) || ot < 0 || ot > 100000)) {
+      toast.error('Enter a valid OT rate (or leave it empty to use the same rate)')
+      return
+    }
+    setBusy(true)
+    try {
+      const res = await api.put<{ updated: number }>('/api/clients/salary-summary/rates', {
+        month,
+        year,
+        projectId,
+        clientRate: n,
+        clientOtRate: ot ?? undefined,
+      })
+      onApplied(n, ot)
+      toast.success(`Client rate ${formatNumber(n)} ${currency}/h applied to ${res.updated} worker${res.updated === 1 ? '' : 's'}`)
+      setRate('')
+      setOtRate('')
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Could not apply the rate')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <div
+      className="print-hidden flex flex-wrap items-center gap-1.5"
+      onClick={(e) => e.stopPropagation()}
+      onKeyDown={(e) => e.stopPropagation()}
+    >
+      <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+        Apply to all {workerCount}:
+      </span>
+      <Input
+        type="number"
+        inputMode="decimal"
+        min={0}
+        step="0.25"
+        value={rate}
+        placeholder={`rate ${currency}/h`}
+        aria-label={`Client rate for all workers of this project`}
+        onChange={(e) => setRate(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') {
+            e.preventDefault()
+            void apply()
+          }
+        }}
+        className="h-7 w-[92px] px-2 py-0 text-right text-xs tabular-nums"
+        disabled={busy}
+      />
+      <Input
+        type="number"
+        inputMode="decimal"
+        min={0}
+        step="0.25"
+        value={otRate}
+        placeholder="OT (optional)"
+        aria-label="Client overtime rate for all workers (optional)"
+        onChange={(e) => setOtRate(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') {
+            e.preventDefault()
+            void apply()
+          }
+        }}
+        className="h-7 w-[96px] px-2 py-0 text-right text-xs tabular-nums"
+        disabled={busy}
+      />
+      <Button
+        type="button"
+        size="sm"
+        variant="secondary"
+        className="h-7 px-2.5 text-xs"
+        onClick={() => void apply()}
+        disabled={busy}
+      >
+        {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
+        Apply
+      </Button>
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// View
+// ---------------------------------------------------------------------------
 
 export function ClientSalarySummaryView() {
   const settings = useAppStore((s) => s.settings)
@@ -269,13 +485,15 @@ export function ClientSalarySummaryView() {
   const [loading, setLoading] = useState(true)
   const [expanded, setExpanded] = useState<string | null>(null)
   const [printGroup, setPrintGroup] = useState<ClientSalaryGroup | null>(null)
+  const [rateEdits, setRateEdits] = useState<RateEdits>({})
 
   const money = useCallback((n: number) => formatMoney(n, settings.currency), [settings.currency])
   const vatPercent = data ? Math.round(data.vatRate * 100) : 15
-  const canEditRate = can(user, 'projects.edit')
+  const canEditRate = can(user, 'payroll.edit')
 
   const loadSummary = useCallback(async () => {
     setLoading(true)
+    setRateEdits({})
     try {
       const query = qs({
         search: search || undefined,
@@ -296,8 +514,14 @@ export function ClientSalarySummaryView() {
     void loadSummary()
   }, [loadSummary])
 
-  const cards = data?.cards
-  const groups = data?.groups ?? []
+  // Live view = server data + in-progress rate edits (amounts update as you type)
+  const view = useMemo(
+    () => (data ? recomputeSummary(data, rateEdits) : null),
+    [data, rateEdits]
+  )
+
+  const cards = view?.cards
+  const groups = view?.groups ?? []
 
   // Footer totals over the (server-filtered) groups
   const totals = useMemo(() => {
@@ -306,31 +530,71 @@ export function ClientSalarySummaryView() {
         workers: acc.workers + g.workerCount,
         projects: acc.projects + g.projectCount,
         hours: round2(acc.hours + g.hours),
+        otHours: round2(acc.otHours + g.otHours),
         billed: round2(acc.billed + g.billedAmount),
         vat: round2(acc.vat + g.vatAmount),
         grand: round2(acc.grand + g.grandTotal),
       }),
-      { workers: 0, projects: 0, hours: 0, billed: 0, vat: 0, grand: 0 }
+      { workers: 0, projects: 0, hours: 0, otHours: 0, billed: 0, vat: 0, grand: 0 }
     )
   }, [groups])
 
-  // Projects billing lines with hours but no negotiated client rate (fallback warning)
+  // Rows still billed at each worker's OWN pay rate (no manual + no project rate)
   const fallbackProjects = useMemo(() => {
-    if (!data) return []
+    if (!view) return []
     const names = new Set<string>()
-    for (const g of data.groups) {
+    for (const g of view.groups) {
       for (const r of g.rows) {
-        if (r.rateSource === 'worker' && r.hours > 0) names.add(r.projectName)
+        if (r.rateSource === 'worker' && (r.hours > 0 || r.otHours > 0)) names.add(r.projectName)
       }
     }
     return Array.from(names).sort()
-  }, [data])
+  }, [view])
 
   const toggle = useCallback((key: string) => {
     setExpanded((prev) => (prev === key ? null : key))
   }, [])
 
   const periodLabel = `${monthName(Number(month))} ${year}`
+
+  /** Update the in-progress edit overlay (live recompute, no request) */
+  const setEdit = useCallback((payrollId: string, patch: RateEdit) => {
+    setRateEdits((prev) => ({ ...prev, [payrollId]: { ...prev[payrollId], ...patch } }))
+  }, [])
+
+  /** Persist one worker's manual client rate (regular hours) */
+  const commitRate = useCallback(
+    async (payrollId: string, v: number) => {
+      await api.put(`/api/payrolls/${payrollId}/client-rate`, { clientRate: v })
+    },
+    []
+  )
+
+  /** Persist one worker's manual client OT rate */
+  const commitOtRate = useCallback(async (payrollId: string, v: number) => {
+    await api.put(`/api/payrolls/${payrollId}/client-rate`, { clientOtRate: v })
+  }, [])
+
+  /** Bulk apply landed — overlay every row of the project with the new rates */
+  const applyBulkToLocal = useCallback(
+    (projectId: string, clientRate: number, clientOtRate: number | null) => {
+      setRateEdits((prev) => {
+        const next = { ...prev }
+        for (const g of groups) {
+          for (const r of g.rows) {
+            if (r.projectId !== projectId) continue
+            next[r.payrollId] = {
+              ...next[r.payrollId],
+              rate: clientRate,
+              ...(clientOtRate !== null ? { otRate: clientOtRate } : {}),
+            }
+          }
+        }
+        return next
+      })
+    },
+    [groups]
+  )
 
   /** One company's summary as CSV (worker lines + Subtotal / VAT / Grand Total) */
   const exportClientCsv = useCallback(
@@ -342,7 +606,9 @@ export function ClientSalarySummaryView() {
         'Category',
         'Project',
         'Hours',
+        'OT Hours',
         `Rate/Hr (${settings.currency})`,
+        `OT Rate (${settings.currency})`,
         `Amount (${settings.currency})`,
       ]
       const rows: (string | number | null | undefined)[][] = g.rows.map((r) => [
@@ -352,7 +618,9 @@ export function ClientSalarySummaryView() {
         r.categoryName,
         r.projectName,
         r.hours,
+        r.otHours,
         r.clientRate,
+        r.clientOtRate,
         r.amount,
       ])
       rows.push([
@@ -362,11 +630,13 @@ export function ClientSalarySummaryView() {
         '',
         '',
         g.hours,
+        g.otHours,
+        '',
         '',
         g.billedAmount,
       ])
-      rows.push([`VAT ${vatPercent}%`, '', '', '', '', '', '', g.vatAmount])
-      rows.push(['GRAND TOTAL (incl. VAT)', '', '', '', '', '', '', g.grandTotal])
+      rows.push([`VAT ${vatPercent}%`, '', '', '', '', '', '', '', '', g.vatAmount])
+      rows.push(['GRAND TOTAL (incl. VAT)', '', '', '', '', '', '', '', '', g.grandTotal])
       downloadCsv(
         csvFilename('client-summary', `${slug(g.clientName)}-${slug(periodLabel)}`),
         buildCsv(headers, rows)
@@ -378,7 +648,7 @@ export function ClientSalarySummaryView() {
 
   /** All clients in one CSV, with per-client subtotal rows + global totals */
   const exportCsv = useCallback(() => {
-    if (!data) return
+    if (!view) return
     const headers = [
       'Client Company',
       'City',
@@ -388,7 +658,9 @@ export function ClientSalarySummaryView() {
       'Category',
       'Project',
       'Hours',
+      'OT Hours',
       `Rate/Hr (${settings.currency})`,
+      `OT Rate (${settings.currency})`,
       `Amount (${settings.currency})`,
     ]
     const rows: (string | number | null | undefined)[][] = groups.flatMap((g) => [
@@ -401,7 +673,9 @@ export function ClientSalarySummaryView() {
         r.categoryName,
         r.projectName,
         r.hours,
+        r.otHours,
         r.clientRate,
+        r.clientOtRate,
         r.amount,
       ]),
       [
@@ -413,30 +687,90 @@ export function ClientSalarySummaryView() {
         '',
         '',
         g.hours,
+        g.otHours,
+        '',
         '',
         g.billedAmount,
       ],
     ])
-    rows.push(['TOTAL BILLED (excl. VAT)', '', '', '', '', '', '', data.cards.billedHours, '', data.cards.billedAmount])
-    rows.push([`VAT ${vatPercent}%`, '', '', '', '', '', '', '', '', data.cards.vatAmount])
-    rows.push(['GRAND TOTAL (incl. VAT)', '', '', '', '', '', '', '', '', data.cards.grandTotal])
+    rows.push([
+      'TOTAL BILLED (excl. VAT)',
+      '',
+      '',
+      '',
+      '',
+      '',
+      '',
+      view.cards.billedHours,
+      view.cards.billedOtHours,
+      '',
+      '',
+      view.cards.billedAmount,
+    ])
+    rows.push([`VAT ${vatPercent}%`, '', '', '', '', '', '', '', '', '', '', view.cards.vatAmount])
+    rows.push([
+      'GRAND TOTAL (incl. VAT)',
+      '',
+      '',
+      '',
+      '',
+      '',
+      '',
+      '',
+      '',
+      '',
+      '',
+      view.cards.grandTotal,
+    ])
     downloadCsv(csvFilename('client-salary-summary', slug(periodLabel)), buildCsv(headers, rows))
     toast.success('Client salary summary exported')
-  }, [data, groups, settings.currency, vatPercent, periodLabel])
+  }, [view, groups, settings.currency, vatPercent, periodLabel])
 
   const scopeLabel = scope === 'include-inactive' ? 'All staff (incl. inactive)' : 'Active staff only'
+
+  /** Rate source badge shown under the rate input */
+  function rateSourceBadge(r: ClientBillingLine) {
+    if (r.rateSource === 'manual') {
+      return (
+        <span
+          className="text-[9px] font-medium text-emerald-700 dark:text-emerald-400"
+          title="Manually entered client rate"
+        >
+          manual
+        </span>
+      )
+    }
+    if (r.rateSource === 'project') {
+      return (
+        <span
+          className="text-[9px] text-muted-foreground"
+          title="Using the project's default client rate — type a rate to override"
+        >
+          project
+        </span>
+      )
+    }
+    return (
+      <span
+        className="text-[9px] font-medium text-amber-600 dark:text-amber-400"
+        title="No client rate set — billed at the worker's own pay rate"
+      >
+        ⚠ worker rate
+      </span>
+    )
+  }
 
   return (
     <div className="space-y-6">
       <PageHeader
         title="Client Salary Summary"
-        description={`Monthly manpower billing per client company — hours × client rate + ${vatPercent}% VAT`}
+        description={`Hours mirror this month's payroll — enter the client rate per worker (client price ≠ worker pay rate) + ${vatPercent}% VAT`}
       >
         <Button
           variant="outline"
           className="print-hidden"
           onClick={exportCsv}
-          disabled={!data || groups.length === 0}
+          disabled={!view || groups.length === 0}
         >
           <Download className="h-4 w-4" />
           CSV
@@ -444,7 +778,7 @@ export function ClientSalarySummaryView() {
         <Button
           className="print-hidden"
           onClick={() => printWithPageRule('size: A4 landscape; margin: 8mm;')}
-          disabled={!data || groups.length === 0}
+          disabled={!view || groups.length === 0}
         >
           <Printer className="h-4 w-4" />
           Print
@@ -509,9 +843,11 @@ export function ClientSalarySummaryView() {
             Client Salary Summary — Manpower Billing · {periodLabel}
           </p>
           <p className="text-[11px] text-neutral-600">
-            Staff scope: {scopeLabel} · Clients: {cards?.totalClients ?? 0} · Deployed workers:{' '}
-            {cards?.totalWorkers ?? 0} · Billed (excl. VAT): {money(cards?.billedAmount ?? 0)} ·
-            Grand total (incl. {vatPercent}% VAT): {money(cards?.grandTotal ?? 0)}
+            Staff scope: {scopeLabel} · Clients: {cards?.totalClients ?? 0} · Workers billed:{' '}
+            {cards?.totalWorkers ?? 0} · Hours: {fmtHours(cards?.billedHours ?? 0)}
+            {cards && cards.billedOtHours > 0 ? ` + ${fmtHours(cards.billedOtHours)} OT` : ''} ·
+            Billed (excl. VAT): {money(cards?.billedAmount ?? 0)} · Grand total (incl.{' '}
+            {vatPercent}% VAT): {money(cards?.grandTotal ?? 0)}
           </p>
         </div>
 
@@ -533,14 +869,14 @@ export function ClientSalarySummaryView() {
               value={String(cards.totalClients)}
               icon={Building2}
               tone="navy"
-              sublabel="Clients with deployed manpower"
+              sublabel="Clients billed this month"
             />
             <StatCard
-              title="Deployed Workers"
+              title="Workers Billed"
               value={String(cards.totalWorkers)}
               icon={Users}
               tone="teal"
-              sublabel={`Distinct staff working at clients`}
+              sublabel={`With payroll in ${periodLabel}`}
             />
             <StatCard
               title={`Billed Amount — ${periodLabel}`}
@@ -548,7 +884,7 @@ export function ClientSalarySummaryView() {
               valuePrefix={settings.currency}
               icon={Wallet}
               tone="violet"
-              sublabel={`${fmtHours(cards.billedHours)} hours × client rate (excl. VAT)`}
+              sublabel={`${fmtHours(cards.billedHours)} h${cards.billedOtHours > 0 ? ` + ${fmtHours(cards.billedOtHours)} OT` : ''} × client rate (excl. VAT)`}
             />
             <StatCard
               title="Grand Total (incl. VAT)"
@@ -561,7 +897,31 @@ export function ClientSalarySummaryView() {
           </div>
         ) : null}
 
-        {/* Bench + multi-client + rate-fallback context notes */}
+        {/* How this report works — hours synced from payroll, rates entered here */}
+        {!loading && view && groups.length > 0 ? (
+          <div className="space-y-1.5 rounded-xl border border-dashed bg-muted/30 px-4 py-2.5 text-xs leading-relaxed text-muted-foreground print:px-2">
+            <p className="flex items-start gap-2">
+              <Lock className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden />
+              <span>
+                <span className="font-semibold text-foreground">Hours &amp; OT hours are synced</span>{' '}
+                from the <span className="font-semibold text-foreground">{periodLabel}</span> payroll —
+                exactly the same numbers as each worker&apos;s Salary Sheet. To change hours, edit the
+                payroll record; they update here automatically.
+              </span>
+            </p>
+            <p className="flex items-start gap-2">
+              <Pencil className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden />
+              <span>
+                <span className="font-semibold text-foreground">Type the client rate</span> in the Rate
+                column of each worker (and the OT rate when needed) — the price you charge the client
+                company is separate from the worker&apos;s own pay rate. Amounts and totals update
+                live; every entry is saved per worker, per month.
+              </span>
+            </p>
+          </div>
+        ) : null}
+
+        {/* Bench + multi-client context notes */}
         {!loading && cards && (cards.benchWorkers > 0 || cards.multiClientWorkers > 0) ? (
           <div className="space-y-1.5 rounded-xl border border-dashed bg-muted/30 px-4 py-2.5 text-xs leading-relaxed text-muted-foreground print:px-2">
             {cards.benchWorkers > 0 && (
@@ -580,7 +940,7 @@ export function ClientSalarySummaryView() {
                 <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden />
                 <span>
                   <span className="font-semibold text-foreground">{cards.multiClientWorkers}</span> workers are
-                  deployed under more than one client and appear in each client&apos;s list; the cards above
+                  billed under more than one client and appear in each client&apos;s list; the cards above
                   count them once.
                 </span>
               </p>
@@ -595,11 +955,11 @@ export function ClientSalarySummaryView() {
               <span className="font-semibold">
                 {fallbackProjects.length} project{fallbackProjects.length === 1 ? '' : 's'}
               </span>{' '}
-              ({fallbackProjects.join(', ')}) ha{fallbackProjects.length === 1 ? 's' : 've'} no client
-              rate set — those hours are billed at each worker&apos;s own payroll rate.
+              ({fallbackProjects.join(', ')}) ha{fallbackProjects.length === 1 ? 's' : 've'} workers
+              still billed at each worker&apos;s OWN pay rate (no client rate set).
               {canEditRate
-                ? ' Set the client rate (✎) inside a client group, or in Project Management, to bill the agreed company price.'
-                : ' Ask an admin/accountant to set the client rate in Project Management.'}
+                ? ' Type the agreed client rate in the Rate column below, or use "Apply to all" for a whole project.'
+                : ' Ask an admin/accountant to enter the client rates.'}
             </span>
           </div>
         ) : null}
@@ -609,8 +969,9 @@ export function ClientSalarySummaryView() {
           <div className="border-b px-4 py-3 sm:px-6">
             <h2 className="text-sm font-semibold">Client-wise Billing Breakdown</h2>
             <p className="text-xs text-muted-foreground">
-              {periodLabel} · sorted by grand total — expand a client to see every worker&apos;s hours,
-              rate and amount, then print or download that company&apos;s summary
+              {periodLabel} · payroll hours × manually-entered client rate + {vatPercent}% VAT — sorted
+              by grand total; expand a client to enter rates and print or download that company&apos;s
+              summary
             </p>
           </div>
 
@@ -619,11 +980,11 @@ export function ClientSalarySummaryView() {
           ) : groups.length === 0 ? (
             <EmptyState
               icon={FileBarChart}
-              title={search ? 'No matches for the current search' : 'No deployed workers found'}
+              title={search ? 'No matches for the current search' : `No payroll records for ${periodLabel}`}
               description={
                 search
                   ? 'Try a different client, worker, iqama or project name.'
-                  : 'Assign workers to client projects (Worker Deployment) to see the client salary summary.'
+                  : 'Client billing mirrors payroll hours — create this month’s payroll in the Payroll module (or Salary Sheet) first, and every worker will appear here automatically with their hours.'
               }
             />
           ) : (
@@ -648,6 +1009,7 @@ export function ClientSalarySummaryView() {
                           </p>
                           <p className="mt-0.5 text-xs text-muted-foreground">
                             {g.workerCount} workers · {fmtHours(g.hours)} h
+                            {g.otHours > 0 ? ` + ${fmtHours(g.otHours)} OT` : ''}
                             {g.city ? ` · ${g.city}` : ''}
                           </p>
                         </div>
@@ -665,21 +1027,73 @@ export function ClientSalarySummaryView() {
                       </button>
                       {open ? (
                         <div className="border-t px-3 py-2.5">
-                          <ul className="divide-y">
-                            {g.rows.map((r) => (
-                              <li key={`${r.staffId}-${r.projectId}`} className="flex items-center justify-between gap-3 py-2">
-                                <div className="min-w-0">
-                                  <p className="truncate text-sm font-medium">{r.fullName}</p>
-                                  <p className="truncate text-[11px] text-muted-foreground">
-                                    {r.projectName} · {fmtHours(r.hours)} h × {formatNumber(r.clientRate)}
-                                  </p>
+                          {bucketByProject(g.rows).map((p) => (
+                            <div key={p.projectId} className="mb-3">
+                              <p className="mb-1.5 flex items-center gap-1.5 text-xs font-semibold">
+                                <FolderKanban className="h-3.5 w-3.5 text-muted-foreground" aria-hidden />
+                                {p.projectName}
+                                <span className="font-normal text-muted-foreground">
+                                  · {p.rows.length} worker{p.rows.length === 1 ? '' : 's'}
+                                </span>
+                              </p>
+                              {canEditRate ? (
+                                <div className="mb-2">
+                                  <BulkRateApply
+                                    projectId={p.projectId}
+                                    month={Number(month)}
+                                    year={Number(year)}
+                                    workerCount={p.rows.length}
+                                    currency={settings.currency}
+                                    onApplied={(rate, ot) => applyBulkToLocal(p.projectId, rate, ot)}
+                                  />
                                 </div>
-                                <p className="shrink-0 text-sm font-semibold tabular-nums">
-                                  {money(r.amount)}
-                                </p>
-                              </li>
-                            ))}
-                          </ul>
+                              ) : null}
+                              <ul className="divide-y">
+                                {p.rows.map((r) => (
+                                  <li key={r.payrollId} className="flex items-start justify-between gap-3 py-2">
+                                    <div className="min-w-0 flex-1">
+                                      <p className="truncate text-sm font-medium">{r.fullName}</p>
+                                      <p className="truncate text-[11px] text-muted-foreground">
+                                        {fmtHours(r.hours)} h
+                                        {r.otHours > 0 ? ` + ${fmtHours(r.otHours)} OT` : ''} ×{' '}
+                                        {formatNumber(r.clientRate)} {settings.currency}
+                                        {r.rateSource === 'worker' ? ' ⚠' : ''}
+                                      </p>
+                                      {canEditRate ? (
+                                        <div className="mt-1 flex items-center gap-2">
+                                          <RateCell
+                                            value={r.clientRate}
+                                            manual={r.manualRate}
+                                            currency={settings.currency}
+                                            canEdit
+                                            compact
+                                            ariaLabel={`Client rate for ${r.fullName}`}
+                                            onChange={(v) => setEdit(r.payrollId, { rate: v })}
+                                            onCommit={(v) => commitRate(r.payrollId, v)}
+                                          />
+                                          {r.otHours > 0 ? (
+                                            <RateCell
+                                              value={r.clientOtRate}
+                                              manual={r.manualOtRate}
+                                              currency={settings.currency}
+                                              canEdit
+                                              compact
+                                              ariaLabel={`Client OT rate for ${r.fullName}`}
+                                              onChange={(v) => setEdit(r.payrollId, { otRate: v })}
+                                              onCommit={(v) => commitOtRate(r.payrollId, v)}
+                                            />
+                                          ) : null}
+                                        </div>
+                                      ) : null}
+                                    </div>
+                                    <p className="shrink-0 text-sm font-semibold tabular-nums">
+                                      {money(r.amount)}
+                                    </p>
+                                  </li>
+                                ))}
+                              </ul>
+                            </div>
+                          ))}
                           <div className="mt-2 space-y-1 border-t pt-2 text-xs">
                             <div className="flex justify-between">
                               <span className="text-muted-foreground">Subtotal (excl. VAT)</span>
@@ -716,7 +1130,8 @@ export function ClientSalarySummaryView() {
                     <p className="text-sm font-bold tabular-nums">{money(totals.grand)}</p>
                   </div>
                   <p className="mt-1 text-xs text-muted-foreground">
-                    {totals.workers} workers · {fmtHours(totals.hours)} hours · incl.{' '}
+                    {totals.workers} workers · {fmtHours(totals.hours)} h
+                    {totals.otHours > 0 ? ` + ${fmtHours(totals.otHours)} OT` : ''} · incl.{' '}
                     {money(totals.vat)} VAT
                   </p>
                 </li>
@@ -731,6 +1146,7 @@ export function ClientSalarySummaryView() {
                       <TableHead className="h-9 min-w-[200px] px-4 print:min-w-0 print:px-2">Client Company</TableHead>
                       <TableHead className="h-9 px-4 text-right print:px-2">Workers</TableHead>
                       <TableHead className="h-9 px-4 text-right print:px-2">Hours</TableHead>
+                      <TableHead className="h-9 px-4 text-right print:px-2">OT Hrs</TableHead>
                       <TableHead className="h-9 px-4 text-right print:px-2">Subtotal (excl. VAT)</TableHead>
                       <TableHead className="h-9 px-4 text-right print:px-2">VAT ({vatPercent}%)</TableHead>
                       <TableHead className="h-9 px-4 text-right print:px-2">Grand Total</TableHead>
@@ -793,7 +1209,20 @@ export function ClientSalarySummaryView() {
                             </div>
                           </TableCell>
                           <TableCell className="px-4 py-2.5 text-right tabular-nums print:px-2">{g.workerCount}</TableCell>
-                          <TableCell className="px-4 py-2.5 text-right tabular-nums print:px-2">{fmtHours(g.hours)}</TableCell>
+                          <TableCell className="px-4 py-2.5 text-right tabular-nums print:px-2">
+                            <span title="Regular hours — mirrors this month's payroll">
+                              {fmtHours(g.hours)}
+                            </span>
+                          </TableCell>
+                          <TableCell className="px-4 py-2.5 text-right tabular-nums text-muted-foreground print:px-2">
+                            {g.otHours > 0 ? (
+                              <span title="Overtime hours — mirrors this month's payroll">
+                                {fmtHours(g.otHours)}
+                              </span>
+                            ) : (
+                              '—'
+                            )}
+                          </TableCell>
                           <TableCell className="px-4 py-2.5 text-right tabular-nums print:px-2">
                             {money(g.billedAmount)}
                           </TableCell>
@@ -820,11 +1249,11 @@ export function ClientSalarySummaryView() {
                           key={`${key}-detail`}
                           className={cn('bg-muted/20 hover:bg-muted/20', open ? '' : 'hidden print:table-row')}
                         >
-                          <TableCell colSpan={8} className="px-4 py-3 sm:px-8 print:px-4">
+                          <TableCell colSpan={9} className="px-4 py-3 sm:px-8 print:px-4">
                             <div className="rounded-lg border bg-background">
                               <div className="flex flex-wrap items-center justify-between gap-3 border-b px-3 py-2">
                                 <p className="text-xs font-semibold">
-                                  Workers deployed at {g.clientName}
+                                  Billed workers — {g.clientName}
                                   <span className="ml-2 font-normal text-muted-foreground">
                                     {g.workerCount} worker{g.workerCount === 1 ? '' : 's'} ·{' '}
                                     {g.workersWithHours} with hours this month
@@ -842,7 +1271,7 @@ export function ClientSalarySummaryView() {
                                 </div>
                               </div>
 
-                              {/* One section per project — each carries its own client rate */}
+                              {/* One section per project — rates entered per worker below */}
                               {bucketByProject(g.rows).map((p) => (
                                 <div key={p.projectId} className="break-inside-avoid">
                                   <div className="flex flex-wrap items-center justify-between gap-2 bg-muted/30 px-3 py-1.5">
@@ -852,32 +1281,37 @@ export function ClientSalarySummaryView() {
                                       <span className="font-normal text-muted-foreground">
                                         · {p.rows.length} worker{p.rows.length === 1 ? '' : 's'} ·{' '}
                                         {fmtHours(p.hours)} h
+                                        {p.otHours > 0 ? ` + ${fmtHours(p.otHours)} OT` : ''}
                                       </span>
                                     </p>
-                                    <p className="flex items-center gap-2">
+                                    <div className="flex flex-wrap items-center gap-3">
+                                      <Tooltip>
+                                        <TooltipTrigger asChild>
+                                          <span className="cursor-help text-xs tabular-nums text-muted-foreground">
+                                            default {formatNumber(p.projectRate)}{' '}
+                                            {settings.currency}/h
+                                          </span>
+                                        </TooltipTrigger>
+                                        <TooltipContent>
+                                          This project&apos;s default client rate (set in Project
+                                          Management) — used for workers whose rate is not entered
+                                          below
+                                        </TooltipContent>
+                                      </Tooltip>
                                       {canEditRate ? (
-                                        <span className="print-hidden">
-                                          <ProjectRateEditor
-                                            projectId={p.projectId}
-                                            rate={p.rate}
-                                            currency={settings.currency}
-                                            onSaved={() => void loadSummary()}
-                                          />
-                                        </span>
-                                      ) : (
-                                        <span className="text-xs font-semibold tabular-nums">
-                                          {formatNumber(p.rate)} {settings.currency}/h
-                                        </span>
-                                      )}
-                                      {p.rateSource === 'worker' && (
-                                        <span className="print-hidden inline-flex items-center rounded-full border border-amber-300 bg-amber-50 px-1.5 py-0 text-[10px] font-medium text-amber-900 dark:border-amber-500/40 dark:bg-amber-950/40 dark:text-amber-200">
-                                          worker rate fallback
-                                        </span>
-                                      )}
+                                        <BulkRateApply
+                                          projectId={p.projectId}
+                                          month={Number(month)}
+                                          year={Number(year)}
+                                          workerCount={p.rows.length}
+                                          currency={settings.currency}
+                                          onApplied={(rate, ot) => applyBulkToLocal(p.projectId, rate, ot)}
+                                        />
+                                      ) : null}
                                       <span className="text-xs font-bold tabular-nums">
                                         {money(p.subtotal)}
                                       </span>
-                                    </p>
+                                    </div>
                                   </div>
                                   <div className="overflow-x-auto">
                                     <Table className="text-xs">
@@ -887,16 +1321,30 @@ export function ClientSalarySummaryView() {
                                           <TableHead className="h-8 min-w-[170px] px-3 print:min-w-0">Worker</TableHead>
                                           <TableHead className="h-8 min-w-[110px] px-3 print:min-w-0">Position</TableHead>
                                           <TableHead className="h-8 min-w-[100px] px-3 print:min-w-0">Category</TableHead>
-                                          <TableHead className="h-8 px-3 text-right">Hours</TableHead>
-                                          <TableHead className="h-8 px-3 text-right">Rate / Hr</TableHead>
+                                          <TableHead className="h-8 px-3 text-right">
+                                            <span title="Mirrors this month's payroll — edit hours in the Payroll module">
+                                              Hours
+                                            </span>
+                                          </TableHead>
+                                          <TableHead className="h-8 px-3 text-right">OT Hrs</TableHead>
+                                          <TableHead className="h-8 min-w-[110px] px-3 text-right">
+                                            <span title="Client billing price per regular hour — enter manually; separate from the worker's pay rate">
+                                              Rate / Hr
+                                            </span>
+                                          </TableHead>
+                                          <TableHead className="h-8 min-w-[110px] px-3 text-right">
+                                            <span title="Client billing price per overtime hour — defaults to the regular rate">
+                                              OT Rate
+                                            </span>
+                                          </TableHead>
                                           <TableHead className="h-8 px-3 text-right">Amount</TableHead>
                                         </TableRow>
                                       </TableHeader>
                                       <TableBody>
                                         {p.rows.map((r, i) => (
                                           <TableRow
-                                            key={`${r.staffId}-${r.projectId}`}
-                                            className={r.hours === 0 ? 'text-muted-foreground/70' : undefined}
+                                            key={r.payrollId}
+                                            className={r.hours === 0 && r.otHours === 0 ? 'text-muted-foreground/70' : undefined}
                                           >
                                             <TableCell className="px-3 py-1.5 text-right tabular-nums text-muted-foreground">
                                               {i + 1}
@@ -910,19 +1358,60 @@ export function ClientSalarySummaryView() {
                                               {r.categoryName ?? '—'}
                                             </TableCell>
                                             <TableCell className="px-3 py-1.5 text-right tabular-nums">
-                                              {fmtHours(r.hours)}
+                                              <span className="inline-flex items-center gap-1">
+                                                {fmtHours(r.hours)}
+                                                <Lock
+                                                  className="h-2.5 w-2.5 text-muted-foreground/60"
+                                                  aria-label="Hours synced from payroll"
+                                                />
+                                              </span>
                                             </TableCell>
                                             <TableCell className="px-3 py-1.5 text-right tabular-nums">
-                                              {formatNumber(r.clientRate)}
-                                              {r.rateSource === 'worker' ? (
-                                                <span
-                                                  className="ml-1 align-middle text-[9px] text-amber-600 dark:text-amber-400"
-                                                  title="Using the worker's own rate — set this project's client rate"
-                                                  aria-label="Worker rate fallback"
-                                                >
-                                                  ⚠
+                                              {r.otHours > 0 ? (
+                                                <span className="inline-flex items-center gap-1">
+                                                  {fmtHours(r.otHours)}
+                                                  <Lock
+                                                    className="h-2.5 w-2.5 text-muted-foreground/60"
+                                                    aria-label="OT hours synced from payroll"
+                                                  />
                                                 </span>
-                                              ) : null}
+                                              ) : (
+                                                '—'
+                                              )}
+                                            </TableCell>
+                                            <TableCell className="px-3 py-1.5 text-right">
+                                              <div className="flex flex-col items-end">
+                                                <RateCell
+                                                  value={r.clientRate}
+                                                  manual={r.manualRate}
+                                                  currency={settings.currency}
+                                                  canEdit={canEditRate}
+                                                  ariaLabel={`Client rate per hour for ${r.fullName}`}
+                                                  onChange={(v) => setEdit(r.payrollId, { rate: v })}
+                                                  onCommit={(v) => commitRate(r.payrollId, v)}
+                                                />
+                                                {rateSourceBadge(r)}
+                                              </div>
+                                            </TableCell>
+                                            <TableCell className="px-3 py-1.5 text-right">
+                                              {r.otHours > 0 || r.manualOtRate > 0 ? (
+                                                <div className="flex flex-col items-end">
+                                                  <RateCell
+                                                    value={r.clientOtRate}
+                                                    manual={r.manualOtRate}
+                                                    currency={settings.currency}
+                                                    canEdit={canEditRate}
+                                                    ariaLabel={`Client overtime rate for ${r.fullName}`}
+                                                    onChange={(v) => setEdit(r.payrollId, { otRate: v })}
+                                                    onCommit={(v) => commitOtRate(r.payrollId, v)}
+                                                  />
+                                                  <span className="text-[9px] text-muted-foreground">
+                                                    {r.manualOtRate > 0 ? 'manual' : '= regular'}
+                                                  </span>
+                                                </div>
+                                              ) : (
+                                                <span className="text-muted-foreground">—</span>
+                                              )}
                                             </TableCell>
                                             <TableCell className="px-3 py-1.5 text-right font-semibold tabular-nums">
                                               {money(r.amount)}
@@ -952,7 +1441,7 @@ export function ClientSalarySummaryView() {
                                   <span className="font-bold tabular-nums">{money(g.grandTotal)}</span>
                                 </div>
                                 <p className="print-hidden pt-1 text-[11px] text-muted-foreground">
-                                  Worker payroll cost (hours × worker rate): {money(g.workerCost)} ·
+                                  Worker payroll cost (hours × worker pay rate): {money(g.workerCost)} ·
                                   Estimated margin before VAT:{' '}
                                   <span className="font-semibold text-emerald-700 dark:text-emerald-400">
                                     {money(g.margin)}
@@ -971,6 +1460,9 @@ export function ClientSalarySummaryView() {
                       <TableCell className="px-4 py-2.5 print:px-2">Total</TableCell>
                       <TableCell className="px-4 py-2.5 text-right tabular-nums print:px-2">{totals.workers}</TableCell>
                       <TableCell className="px-4 py-2.5 text-right tabular-nums print:px-2">{fmtHours(totals.hours)}</TableCell>
+                      <TableCell className="px-4 py-2.5 text-right tabular-nums print:px-2">
+                        {totals.otHours > 0 ? fmtHours(totals.otHours) : '—'}
+                      </TableCell>
                       <TableCell className="px-4 py-2.5 text-right tabular-nums print:px-2">{money(totals.billed)}</TableCell>
                       <TableCell className="px-4 py-2.5 text-right tabular-nums print:px-2">{money(totals.vat)}</TableCell>
                       <TableCell className="px-4 py-2.5 text-right tabular-nums print:px-2">{money(totals.grand)}</TableCell>
@@ -998,10 +1490,10 @@ export function ClientSalarySummaryView() {
         group={printGroup}
         month={Number(month)}
         year={Number(year)}
-        vatRate={data?.vatRate ?? 0.15}
+        vatRate={view?.vatRate ?? 0.15}
       />
     </div>
   )
 }
 
-// HMR bump
+// HMR bump 2026-01-payroll-synced-rates

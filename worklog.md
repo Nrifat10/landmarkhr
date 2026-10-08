@@ -961,3 +961,48 @@ Stage Summary:
 - Client rate lives on the PROJECT (negotiated supply price), editable in Project Management AND inline from the summary (✎ pencil, projects.edit permission); when unset the worker's own payroll rate is used as a clearly-flagged fallback.
 - Worker payroll cost + estimated margin shown per client (screen-only) making the client-price vs worker-salary distinction visible (user's 20 vs 15 SAR example).
 - Gotchas for future agents: (1) after `db run push` RESTART the dev server (stale Prisma client → Unknown field 500s); (2) Turbopack can serve stale view chunks — force a content-changing save or restart; (3) FilterSelect options MUST be {value,label} objects (strings silently render undefined-key items); (4) agent-browser refs go stale across React re-renders — re-snapshot before clicking after data reloads.
+
+---
+Task ID: 20
+Agent: main (Z.ai Code)
+Task: Client Salary Summary — hours MIRROR PAYROLL + manual per-worker client rate input (client rate ≠ worker pay rate)
+
+User request (Bengali): "Client Salary Summary te hours and rate input kora jacce na. Same month a payroll and client salary summary same name workers working hours same thakbe kintu rate manually input kore nebo karon dui jaygay rate different thakbe. Client rate and workers pay rate alada."
+→ (1) Hours could not be input/were wrong — they must be EXACTLY the payroll hours for the same month. (2) The client rate must be entered MANUALLY per worker (it is a separate price from the worker's pay rate).
+
+Work Log:
+- Root cause: the summary sourced hours from raw ATTENDENCE aggregation (7,050 h) while payroll held 6,310 h + 529 OT for Sept 2026 — numbers could never match, and rates only existed as a project-level setting (no per-worker input).
+- Schema: added `Payroll.clientRate Float @default(0)` + `Payroll.clientOtRate Float @default(0)` (manually-entered CLIENT billing rates stored ON the payroll row — snapshot semantics like hourlyRateSnapshot; 0 = inherit). `bun run db:push` + dev-server restart (known gotcha). Verified the suspicious `@@index(onth, year])` seen in grep output was a display artifact — od showed clean bytes `@@index([month, year])`.
+- Payroll APIs: POST /api/payrolls now prefills `clientRate` from `project.clientRatePerHour` when the caller omits it (project lookup extended); PUT /api/payrolls/[id] PRESERVES existing clientRate/clientOtRate when the payroll form omits them (`?? existing`). Both schemas gained optional 0–100000 fields.
+- NEW `PUT /api/payrolls/[id]/client-rate`: lightweight editor {clientRate?, clientOtRate?}, perm payroll.edit, activity-logged — never touches pay rates.
+- NEW `PUT /api/clients/salary-summary/rates`: bulk apply {month, year, projectId, clientRate, clientOtRate?, onlyWithHours=true} → updateMany on the project's payroll rows; activity-logged.
+- Types: ClientBillingLine gained payrollId, otHours, clientOtRate, manualRate/manualOtRate (raw stored), projectRate (fallback), rateSource now 'manual' | 'project' | 'worker'; ClientSalaryGroup + cards gained otHours/billedOtHours; PayrollRow gained clientRate/clientOtRate.
+- GET /api/clients/salary-summary REWRITTEN: source = Payroll records for month+year (staff not deleted, active by default). hours = totalHours, otHours = overtimeHours (EXACT salary-sheet numbers). Rate resolution: payroll.clientRate > 0 → manual; else project.clientRatePerHour → project; else worker's hourlyRateSnapshot → worker (⚠). OT effective = clientOtRate > 0 ? clientOtRate : effective regular. amount = h×rate + ot×otRate; workerCost = h×workerRate + ot×workerOtRate (payroll snapshots). Groups/cards/sorting/search all preserved; "No Client (Unlinked Payroll)" bucket last; workersWithHours counts h+OT > 0.
+- View client-salary-summary.tsx REWRITTEN:
+  - RateCell: always-editable inline number input per worker (prefilled with the EFFECTIVE rate) — live amount recompute while typing (edits overlay + recomputeSummary pure function rebuilds rows/subtotals/VAT/grand/share/cards), commits on Enter/blur via the client-rate endpoint, Esc reverts, invalid input toasts + resets, saved → green ✓ 1.4s, focus+blur without typing does NOT save (dirty flag), syncs from parent (bulk apply/reload) while not editing via render-time prop adjustment (React lint-safe: no setState-in-effect, no ref reads in render).
+  - OT Rate input shown per row when the worker has OT hours (or a manual OT rate) with "= regular"/"manual" hint.
+  - BulkRateApply per project bucket: "Apply to all N: [rate] [OT optional] Apply" → bulk endpoint → local overlay for every row (rows with own manual OT keep it).
+  - Hours/OT cells carry a tiny Lock icon + titles "Mirrors this month's payroll — edit hours in the Payroll module"; table headers tooltip the same.
+  - Rate source badge under each input: "manual" (green) / "project" (gray) / "⚠ worker rate" (amber); project bucket header shows "default NN SAR/h" chip (tooltip: fallback set in Project Management).
+  - Info banner (2 lines): hours synced from {period} payroll exactly like the Salary Sheet + type the client rate per worker (client price ≠ worker pay rate).
+  - Main table gained OT HRS column (muted '—' when 0); cards: "Workers Billed (with payroll in {period})", Billed card sublabel "6310 h + 529 OT × client rate"; empty state now explains "No payroll records for {period} — create this month's payroll first".
+  - CSVs (per-client + global) gained OT Hours + OT Rate columns; mobile cards show "212 h + 11 OT × 72.00 SAR" + compact rate inputs + bulk apply; footer totals include OT.
+  - canEditRate switched to payroll.edit (Admin/Accountant/HR have it).
+- Print client-summary-print.tsx: table now SN/Worker/Position/Project/Hours/OT Hrs/Rate/OT Rate/Amount (per-worker rates, not per-project), subtotal row shows hours+OT, Bill-To "Total Hours: 1594 + 141 OT", payment note reworded ("each worker's payroll hours (regular + overtime) × the agreed client rate per hour. Hours match the {period} payroll exactly.").
+- topbar.tsx: stale subtitle "Original salary by client company" → "Client billing — payroll hours × client rate + VAT".
+- QA (agent-browser as Super Admin + curl):
+  - Sept 2026 renders: 4 clients, 32 workers billed, 6,310 h + 529 OT, billed 391,171 + VAT 58,675.65 = grand 449,846.65; amber fallback banner lists the 4 projects still on worker-rate fallback (their project rates are 0 in the live DB — user's own edits).
+  - HOURS CROSS-CHECK vs Salary Sheet API: 32/32 rows match exactly (hours + OT), totals 6,310/529 identical — the user's core requirement is guaranteed by construction (single source: Payroll rows).
+  - Rate input: typed 75 on Abdul Kareem → amount live-updated to SAR 16,725 while typing, Enter saved (DB manualRate=75, rateSource=manual, group grand → 140,949.75; API-verified).
+  - Bulk apply: rate 72 to all 8 Al Waha workers → all inputs show 72, DB manualRate=[72×8], billed 124,920 = 1,735 h × 72, grand 143,658 (API-verified).
+  - OT rate input: 80 on Abdul Kareem → amount 16,144 = 212×72 + 11×80 (live + DB manualOtRate=80 both verified).
+  - Print dialog: full billing statement with letterhead, Bill-To + CR No, per-row 72.00/80.00 rates, hours+OT columns, amount in words, signatures — text-verified.
+  - Mobile 390px: cards stack (scrollWidth 390 = clientWidth), expanded Al Waha card shows worker lines "212 h + 11 OT × 72.00 SAR", compact rate inputs + APPLY TO ALL.
+  - Console/errors clean; lint 0 problems; dev.log clean.
+  - QA data RESTORED: all 32 Sept-2026 manual rates reset to 0 (inherit) — Al Waha back to project default 70, grand 139,667.50 (pre-QA state verified after reset).
+
+Stage Summary:
+- Client Salary Summary is now PAYROLL-DRIVEN: pick a month → every payroll row becomes a billing line with EXACTLY the salary-sheet hours (regular + OT, lock-iconed, read-only) — hours can no longer diverge from payroll.
+- The CLIENT RATE is manually typed per worker (always-visible inputs, live totals), stored on the payroll row per month; OT rate optional (defaults to the regular rate). Fallback chain manual → project default → worker rate (⚠ flagged). Bulk "Apply to all" per project.
+- Rates live in Payroll.clientRate/clientOtRate: created payroll rows prefill from the project default, payroll form edits preserve them, and the summary endpoints are the designated editors (payroll.edit permission).
+- Gotchas for future agents: (1) react-hooks v6 rules — no setState inside effects and no ref reads during render; use the render-time "adjust state when a prop changes" pattern (see RateCell prevValue). (2) grep output of schema.prisma can STRIP "[m" (looked like `@@index(onth, year])`) — verify with od/Read before "fixing" it. (3) Reload of the SPA resets to Dashboard — re-navigate for QA. (4) After bulk apply, mounted RateCells sync via the value-prop render pattern (only while not editing).

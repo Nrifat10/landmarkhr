@@ -178,6 +178,12 @@ model Payroll {
   unionFees           Float    @default(0)
   otherDeductionValue Float    @default(0)
   otherDeductionType  String   @default("fixed") // fixed | percent
+  // Client billing (Client Salary Summary) — rates charged to the CLIENT company.
+  // Distinct from the worker pay rates above (hourlyRateSnapshot/overtimeRateSnapshot).
+  // 0 = not set → the summary falls back to the project's default client rate,
+  // then to the worker's own rate (flagged). Manually entered per worker per month.
+  clientRate          Float    @default(0) // billed to client per REGULAR hour
+  clientOtRate        Float    @default(0) // billed to client per OT hour (0 = same as effective client rate)
   grossPay            Float
   totalDeductions     Float
   netPay              Float

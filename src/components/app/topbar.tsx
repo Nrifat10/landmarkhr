@@ -35,7 +35,7 @@ const VIEW_TITLES: Record<string, { title: string; subtitle: string }> = {
   advances: { title: 'Worker Advances', subtitle: 'Salary advances & payroll recovery' },
   'salary-sheet': { title: 'Salary Sheet', subtitle: 'Monthly payroll sheet & printing' },
   'salary-summary': { title: 'Staff Salary Summary', subtitle: 'Category-wise salary breakdown' },
-  'client-salary-summary': { title: 'Client Salary Summary', subtitle: 'Original salary by client company' },
+  'client-salary-summary': { title: 'Client Salary Summary', subtitle: 'Client billing — payroll hours × client rate + VAT' },
   'income-list': { title: 'Income List', subtitle: 'Company income transactions' },
   'expense-list': { title: 'Expense List', subtitle: 'Company expense transactions' },
   'accounts-summary': { title: 'Accounts Summary', subtitle: 'Income vs expense analysis' },
